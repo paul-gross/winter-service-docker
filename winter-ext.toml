@@ -1,0 +1,13 @@
+name = "winter-service-docker"
+
+doctor = "workflow/doctor.sh"
+
+[provides]
+service = "workflow/service"
+
+[implements]
+service = "v1"
+
+[hooks]
+on_env_init    = "./hooks/init-worktree.sh"
+on_env_destroy = "./hooks/destroy-worktree.sh"

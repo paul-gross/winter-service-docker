@@ -1,0 +1,55 @@
+# Declarative manifest for winter-service-docker (TOML format).
+# Copy this to workspace:/.winter/config/winter-service-docker/config.toml and customize.
+#
+# This file is the live configuration for the docker_orchestrator package. It
+# describes every service in a structured, machine-readable format consumed at
+# runtime. The loader reads config.toml from the extension config dir (resolved
+# via WINTER_EXT_CONFIG_DIR on every dispatch, or falling back to
+# <workspace-root>/.winter/config/winter-service-docker/).
+#
+# Scaffold a starter config with:
+#   PYTHONPATH=src python3 -m docker_orchestrator.scaffold <dest-dir>
+
+# Prefix for COMPOSE_PROJECT_NAME.  Each env's compose project is named
+# <project_prefix>-<env> (e.g. "myapp-alpha", "myapp-beta") so containers,
+# networks, and volumes are automatically namespaced per env and never collide.
+# The workspace scope uses <project_prefix>-workspace.
+project_prefix = "myapp"
+
+# Path to the compose file consumed by this orchestrator.
+# Relative paths are resolved relative to this config dir (alongside config.toml).
+# Absolute paths are used as-is.
+compose_file = "compose.yaml"
+
+# ---------------------------------------------------------------------------
+# Services — declare every service winter should manage.
+#
+# Fields:
+#   name  (required) — unique identifier used in restart and logs patterns.
+#
+# WSD_PORT_<NAME> port-substitution convention:
+#   Published host ports in compose.yaml should use ${WSD_PORT_<NAME>}
+#   placeholders where <NAME> is the UPPER-CASED service name.
+#   winter-service-docker substitutes WINTER_PORT_BASE + <position> at runtime,
+#   where <position> is the 0-based declaration order of the [[service]] entry
+#   in this file. Reordering entries reassigns ports.
+#
+#   Example with WINTER_PORT_BASE=4060 (gamma env):
+#     backend (position 0) → WSD_PORT_BACKEND = 4060
+#     db      (position 1) → WSD_PORT_DB      = 4061
+#
+#   Alpha (port_base=4020), beta (4040), gamma (4060) each get unique host
+#   ports for every service without manual configuration.
+#
+# Workspace scope:
+#   Workspace-scoped singleton services (shared across all feature envs) live
+#   in a separate compose project named <project_prefix>-workspace. Drive them
+#   with `winter service up/down workspace` — no per-service scope field is
+#   needed in this file.  See index.md for the workspace-scope model.
+# ---------------------------------------------------------------------------
+
+[[service]]
+name = "backend"
+
+[[service]]
+name = "db"

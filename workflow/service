@@ -1,0 +1,21 @@
+#!/bin/sh
+# Winter service-provider entrypoint shim for winter-service-docker.
+# Winter sets cwd to the workspace root and invokes this as:
+#   <entrypoint> <action> [positional...]
+# All parameters beyond action arrive via WINTER_* env vars.
+
+# Resolve the extension's src directory.  WINTER_EXT_DIR is the extension
+# clone root (set by winter); fall back to the script's own real directory
+# when invoked outside of winter (e.g. in tests or direct invocation).
+if [ -n "${WINTER_EXT_DIR:-}" ]; then
+    _SRC="$WINTER_EXT_DIR/src"
+else
+    _SELF="$0"
+    while [ -L "$_SELF" ]; do
+        _SELF="$(readlink "$_SELF")"
+    done
+    _SRC="$(cd "$(dirname "$_SELF")/.." && pwd)/src"
+fi
+
+export PYTHONPATH="$_SRC${PYTHONPATH:+:$PYTHONPATH}"
+exec python3 -m docker_orchestrator.cli "$@"
