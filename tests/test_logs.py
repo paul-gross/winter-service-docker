@@ -1,7 +1,7 @@
 """Phase 4 unit tests for the ``logs`` command implementation.
 
 Covers:
-1. WINTER_LOG_* → docker-flag mapping: follow, tail, since, until, timestamps.
+1. argv render flags → docker-flag mapping: follow, tail, since, until, timestamps.
 2. NDJSON transform: ts split from msg; env+svc present on every line.
 3. Unparseable-ts → null ts + whole line in msg.
 4. Multi-service fan-out: each service gets its own compose call.
@@ -11,7 +11,7 @@ Covers:
 8. BrokenPipeError in streaming mode returns 0.
 9. Missing manifest fields returns 1 with diagnostic.
 10. No services matched returns 1 with diagnostic.
-11. Log args build: each WINTER_LOG_* flag appears correctly in the argv.
+11. read_log_options: argv parsing of each flag, flag-absent defaults, --tail all.
 12. CLI dispatch: logs exits non-2 and non-3.
 """
 
@@ -21,7 +21,6 @@ import json
 import subprocess
 from io import StringIO
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -30,6 +29,7 @@ from docker_orchestrator.logs import (
     _build_log_args,
     _collect_log_targets,
     _parse_docker_log_line,
+    read_log_options,
     cmd_logs,
 )
 from docker_orchestrator.manifest import DockerManifest, ServiceDecl
@@ -421,65 +421,97 @@ def test_cmd_logs_no_match_returns_1(tmp_path: Path, capsys: pytest.CaptureFixtu
 
 
 # ---------------------------------------------------------------------------
-# 11. WINTER_LOG_* env var → flag mapping (via env var injection)
+# 11. read_log_options: argv render-flag parsing
 # ---------------------------------------------------------------------------
 
 
-def test_cmd_logs_reads_winter_log_follow(tmp_path: Path) -> None:
-    """WINTER_LOG_FOLLOW=1 → follow=True → uses compose_stream."""
-    manifest = _make_manifest(services=["db"])
-    client = FakeComposeClient(compose_stream_results=[([], 0)])
-    sink = StringIO()
-
-    with patch.dict("os.environ", {"WINTER_LOG_FOLLOW": "1"}):
-        rc = cmd_logs(["alpha/db"], manifest, tmp_path, client, sink=sink)
-
-    assert rc == 0
-    assert len(client.compose_stream_calls) == 1
+def test_read_log_options_patterns_only_defaults() -> None:
+    """No flags → patterns preserved; follow False, tail/since/until None."""
+    patterns, follow, tail, since, until = read_log_options(["alpha/db", "beta/api"])
+    assert patterns == ["alpha/db", "beta/api"]
+    assert follow is False
+    assert tail is None
+    assert since is None
+    assert until is None
 
 
-def test_cmd_logs_reads_winter_log_tail(tmp_path: Path) -> None:
-    """WINTER_LOG_TAIL=50 → --tail 50 in compose args."""
+def test_read_log_options_follow_long_and_short() -> None:
+    _, follow, _, _, _ = read_log_options(["alpha/db", "--follow"])
+    assert follow is True
+    _, follow, _, _, _ = read_log_options(["alpha/db", "-f"])
+    assert follow is True
+
+
+def test_read_log_options_tail_long_and_short() -> None:
+    _, _, tail, _, _ = read_log_options(["alpha/db", "--tail", "50"])
+    assert tail == "50"
+    _, _, tail, _, _ = read_log_options(["alpha/db", "-n", "100"])
+    assert tail == "100"
+
+
+def test_read_log_options_tail_all() -> None:
+    """``--tail all`` is passed through verbatim (docker accepts ``all``)."""
+    _, _, tail, _, _ = read_log_options(["alpha/db", "--tail", "all"])
+    assert tail == "all"
+
+
+def test_read_log_options_since_until_consumed_as_is() -> None:
+    patterns, _, _, since, until = read_log_options(
+        ["alpha/db", "--since", "2024-01-01T00:00:00Z", "--until", "2024-12-31T23:59:59Z"]
+    )
+    assert patterns == ["alpha/db"]
+    assert since == "2024-01-01T00:00:00Z"
+    assert until == "2024-12-31T23:59:59Z"
+
+
+def test_read_log_options_timestamps_accepted_no_op() -> None:
+    """``-t``/``--timestamps`` is accepted and does not become a pattern."""
+    patterns, _, _, _, _ = read_log_options(["alpha/db", "-t"])
+    assert patterns == ["alpha/db"]
+    patterns, _, _, _, _ = read_log_options(["alpha/db", "--timestamps"])
+    assert patterns == ["alpha/db"]
+
+
+def test_read_log_options_flags_only_yields_no_patterns() -> None:
+    """A flags-only argv (winter's no-pattern logs dispatch) parses to zero patterns."""
+    patterns, follow, tail, _, _ = read_log_options(["--tail", "200"])
+    assert patterns == []
+    assert follow is False
+    assert tail == "200"
+
+
+def test_read_log_options_all_flags_together() -> None:
+    patterns, follow, tail, since, until = read_log_options(
+        [
+            "alpha/db",
+            "-f",
+            "-n",
+            "25",
+            "--since",
+            "2024-01-01T00:00:00Z",
+            "--until",
+            "2024-12-31T23:59:59Z",
+            "-t",
+        ]
+    )
+    assert patterns == ["alpha/db"]
+    assert follow is True
+    assert tail == "25"
+    assert since == "2024-01-01T00:00:00Z"
+    assert until == "2024-12-31T23:59:59Z"
+
+
+def test_cmd_logs_kwargs_tail_maps_to_compose_arg(tmp_path: Path) -> None:
+    """tail kwarg → --tail in compose args (end-to-end through cmd_logs)."""
     manifest = _make_manifest(services=["db"])
     client = FakeComposeClient(compose_default=_ok_result(""))
     sink = StringIO()
 
-    with patch.dict("os.environ", {"WINTER_LOG_TAIL": "50", "WINTER_LOG_FOLLOW": "0"}):
-        cmd_logs(["alpha/db"], manifest, tmp_path, client, sink=sink)
+    cmd_logs(["alpha/db"], manifest, tmp_path, client, sink=sink, follow=False, tail="50")
 
     args = client.compose_calls[0].args
     assert "--tail" in args
     assert args[args.index("--tail") + 1] == "50"
-
-
-def test_cmd_logs_reads_winter_log_since(tmp_path: Path) -> None:
-    """WINTER_LOG_SINCE → --since in compose args."""
-    manifest = _make_manifest(services=["db"])
-    client = FakeComposeClient(compose_default=_ok_result(""))
-    sink = StringIO()
-    ts = "2024-01-01T00:00:00Z"
-
-    with patch.dict("os.environ", {"WINTER_LOG_SINCE": ts, "WINTER_LOG_FOLLOW": "0"}):
-        cmd_logs(["alpha/db"], manifest, tmp_path, client, sink=sink)
-
-    args = client.compose_calls[0].args
-    assert "--since" in args
-    assert args[args.index("--since") + 1] == ts
-
-
-def test_cmd_logs_reads_winter_log_until(tmp_path: Path) -> None:
-    """WINTER_LOG_UNTIL → --until in compose args."""
-    manifest = _make_manifest(services=["db"])
-    client = FakeComposeClient(compose_default=_ok_result(""))
-    sink = StringIO()
-    ts = "2024-12-31T23:59:59Z"
-
-    with patch.dict("os.environ", {"WINTER_LOG_UNTIL": ts, "WINTER_LOG_FOLLOW": "0"}):
-        cmd_logs(["alpha/db"], manifest, tmp_path, client, sink=sink)
-
-    args = client.compose_calls[0].args
-    assert "--until" in args
-    assert args[args.index("--until") + 1] == ts
 
 
 # ---------------------------------------------------------------------------

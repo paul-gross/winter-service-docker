@@ -1,8 +1,8 @@
 """Logs command implementation for winter-service-docker.
 
-Implements ``logs [<pattern>...]`` using the injectable ``ComposeClient``
-seam.  Winter forwards zero or more ``<env>/<service>`` glob patterns and
-sets the ``WINTER_LOG_*`` env vars (see ``ai/provider-contract.md``).
+Implements ``logs [<pattern>...] [render flags]`` using the injectable
+``ComposeClient`` seam.  Winter forwards zero or more ``<env>/<service>`` glob
+patterns followed by the render flags (see ``ai/provider-contract.md``).
 
 NDJSON line contract (one object per line on stdout):
     {"ts": "<RFC3339>", "env": "<env>", "svc": "<service>", "msg": "<line>"}
@@ -16,12 +16,13 @@ NDJSON line contract (one object per line on stdout):
     ``env`` and ``svc`` are set from the loop context (not parsed from the
     docker output).
 
-WINTER_LOG_* env var → docker flag mapping:
-    WINTER_LOG_FOLLOW=1       → ``--follow``
-    WINTER_LOG_TAIL=<n>       → ``--tail <n>``
-    WINTER_LOG_SINCE=<rfc>    → ``--since <rfc>``
-    WINTER_LOG_UNTIL=<rfc>    → ``--until <rfc>``
-    WINTER_LOG_TIMESTAMPS=*   → always pass ``--timestamps`` (required for ts field)
+argv render flag → docker flag mapping:
+    -f / --follow            → ``--follow``
+    -n / --tail <n|all>      → ``--tail <n|all>``
+    --since <rfc3339>        → ``--since <rfc>``
+    --until <rfc3339>        → ``--until <rfc>``
+    -t / --timestamps        → accepted and discarded; ``--timestamps`` is always
+                               passed regardless (required to populate the ts field)
 
 For follow mode a streaming ``compose_stream`` call is used so lines arrive
 incrementally.  For non-follow mode, ``compose`` with ``capture_output=True``
@@ -44,7 +45,6 @@ Return value: worst exit code across all service log calls.
 from __future__ import annotations
 
 import json
-import os
 import re
 import subprocess
 import sys
@@ -109,7 +109,8 @@ def _build_log_args(
     with the RFC3339 timestamp instead of docker compose's ``<svc>-<n>  | ``
     prefix — without it the timestamp is not at the start of the line and
     ``ts`` parsing fails (env/svc come from loop context, not the prefix).
-    Other flags are added only when the corresponding WINTER_LOG_* var is set.
+    The remaining flags are added only when the corresponding argv option
+    (parsed by ``read_log_options``) is present.
     """
     args = ["logs", "--no-log-prefix", "--timestamps"]
     if follow:
@@ -153,16 +154,58 @@ def _stream_ndjson(
         sink.flush()
 
 
-def _read_log_options() -> tuple[bool, str | None, str | None, str | None]:
-    """Read WINTER_LOG_* env vars.
+def read_log_options(
+    tokens: list[str],
+) -> tuple[list[str], bool, str | None, str | None, str | None]:
+    """Split the ``logs`` action's argv ``tokens`` into patterns + render options.
 
-    Returns ``(follow, tail, since, until)``.
+    Mirrors ``winter service logs``' flag surface, which winter appends after
+    the positional ``<pattern...>`` tokens::
+
+        <pattern...> [-f|--follow] [-n|--tail <N|all>] \\
+          [--since <rfc3339>] [--until <rfc3339>] [-t|--timestamps]
+
+    ``--since``/``--until`` carry winter's already-resolved RFC3339 values and
+    are consumed as-is. ``-t/--timestamps`` is accepted and discarded — docker
+    always receives ``--timestamps`` so the ``ts`` field can be populated. Any
+    non-flag token is a positional pattern.
+
+    This is a thin contract parser, not a general getopt: it relies on winter's
+    emission guarantees — selection patterns never lead with ``-``, and a value
+    flag (``-n``/``--tail``, ``--since``, ``--until``) is always followed by its
+    value. Do not "harden" it past those guarantees without changing the
+    producer contract too.
+
+    Returns ``(patterns, follow, tail, since, until)``.
     """
-    follow = os.environ.get("WINTER_LOG_FOLLOW", "0") == "1"
-    tail = os.environ.get("WINTER_LOG_TAIL") or None
-    since = os.environ.get("WINTER_LOG_SINCE") or None
-    until = os.environ.get("WINTER_LOG_UNTIL") or None
-    return follow, tail, since, until
+    patterns: list[str] = []
+    follow = False
+    tail: str | None = None
+    since: str | None = None
+    until: str | None = None
+
+    i = 0
+    n = len(tokens)
+    while i < n:
+        tok = tokens[i]
+        if tok in ("-f", "--follow"):
+            follow = True
+        elif tok in ("-t", "--timestamps"):
+            pass  # docker always passes --timestamps; flag accepted as a no-op
+        elif tok in ("-n", "--tail"):
+            i += 1
+            tail = tokens[i] if i < n else None
+        elif tok == "--since":
+            i += 1
+            since = tokens[i] if i < n else None
+        elif tok == "--until":
+            i += 1
+            until = tokens[i] if i < n else None
+        else:
+            patterns.append(tok)
+        i += 1
+
+    return patterns, follow, tail, since, until
 
 
 def _collect_log_targets(
@@ -209,15 +252,16 @@ def cmd_logs(
     client: ComposeClient,
     *,
     sink: IO[str] | None = None,
-    follow: bool | None = None,
+    follow: bool = False,
     tail: str | None = None,
     since: str | None = None,
     until: str | None = None,
 ) -> int:
     """Implement ``logs [<pattern>...]``.
 
-    Reads WINTER_LOG_* env vars (unless overridden via kwargs for testing)
-    and streams NDJSON ``{ts,env,svc,msg}`` lines to *sink* (default stdout).
+    The render options arrive as keyword args (parsed from argv by
+    ``read_log_options`` at the CLI entrypoint) and this streams NDJSON
+    ``{ts,env,svc,msg}`` lines to *sink* (default stdout).
 
     Args:
         patterns: Zero or more ``<env>/<service>`` glob patterns.
@@ -225,10 +269,10 @@ def cmd_logs(
         workspace_root: Absolute path to the workspace root.
         client: Injectable ``ComposeClient`` (real or fake).
         sink: Output stream for NDJSON lines; defaults to ``sys.stdout``.
-        follow: Override WINTER_LOG_FOLLOW; None means read from env.
-        tail: Override WINTER_LOG_TAIL; None means read from env.
-        since: Override WINTER_LOG_SINCE; None means read from env.
-        until: Override WINTER_LOG_UNTIL; None means read from env.
+        follow: Stream live output after the backlog.
+        tail: Resolved count string (``N`` or ``all``); None omits ``--tail``.
+        since: RFC3339 lower bound; None omits ``--since``.
+        until: RFC3339 upper bound; None omits ``--until``.
     """
     out: IO[str] = sink if sink is not None else sys.stdout
 
@@ -238,13 +282,6 @@ def cmd_logs(
             file=sys.stderr,
         )
         return 1
-
-    # Read log options (env vars override if kwargs are not supplied).
-    _env_follow, _env_tail, _env_since, _env_until = _read_log_options()
-    _follow = follow if follow is not None else _env_follow
-    _tail = tail if tail is not None else _env_tail
-    _since = since if since is not None else _env_since
-    _until = until if until is not None else _env_until
 
     # Resolve targets from patterns.
     targets = _collect_log_targets(patterns, manifest)
@@ -268,13 +305,13 @@ def cmd_logs(
         ctx = build_env_context(env, manifest.project_prefix, workspace_root)
         log_args = _build_log_args(
             svc,
-            follow=_follow,
-            tail=_tail,
-            since=_since,
-            until=_until,
+            follow=follow,
+            tail=tail,
+            since=since,
+            until=until,
         )
 
-        if _follow:
+        if follow:
             # Streaming mode: use compose_stream so lines are emitted as they arrive.
             try:
                 line_iter, wait_fn = client.compose_stream(

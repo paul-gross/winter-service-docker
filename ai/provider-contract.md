@@ -39,13 +39,18 @@ where `<position>` is the 0-based index of the service's `[[service]]` entry amo
 
 ## `docker logs` flag pass-through
 
-The `logs` action honors `WINTER_LOG_*` env vars set by `winter service logs` by passing them through to `docker logs`:
+`winter service logs` appends the render options as CLI flags after the positional `<env>/<service>` patterns; the `logs` action parses them off argv (in `read_log_options`) and maps them onto `docker compose logs`:
 
-- `WINTER_LOG_FOLLOW` (`"1"`) → `--follow`
-- `WINTER_LOG_TAIL` (int as str) → `--tail <n>`
-- `WINTER_LOG_SINCE` (RFC3339 or `""`) → `--since <ts>`
-- `WINTER_LOG_UNTIL` (RFC3339 or `""`) → `--until <ts>`
-- `WINTER_LOG_TIMESTAMPS` (`"1"`) → `--timestamps`
+```
+<entrypoint> logs <pattern...> [-f|--follow] [-n|--tail <N|all>] \
+  [--since <rfc3339>] [--until <rfc3339>] [-t|--timestamps]
+```
+
+- `-f`/`--follow` → `--follow`
+- `-n`/`--tail <N|all>` → `--tail <N|all>` (carried as-is; docker accepts `all`)
+- `--since <rfc3339>` → `--since <ts>` (consumed as-is; winter does the duration parsing)
+- `--until <rfc3339>` → `--until <ts>`
+- `-t`/`--timestamps` → accepted and discarded; `--timestamps` is **always** passed to docker so the `ts` field can be populated
 
 Winter re-applies its own tail/time backstop, so faithfully streaming docker's output is sufficient.
 

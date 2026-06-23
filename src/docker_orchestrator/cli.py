@@ -128,16 +128,27 @@ def _cmd_restart(argv_rest: list[str], workspace_root: Path | None) -> int:
 
 
 def _cmd_logs(argv_rest: list[str], workspace_root: Path | None) -> int:
-    """Implement ``logs [<pattern>...]``."""
+    """Implement ``logs [<pattern>...] [render flags]``."""
     from docker_orchestrator.compose_client import ComposeClient
-    from docker_orchestrator.logs import cmd_logs
+    from docker_orchestrator.logs import cmd_logs, read_log_options
     from docker_orchestrator.manifest import resolve_config_dir
+
+    patterns, follow, tail, since, until = read_log_options(argv_rest)
 
     config_dir = resolve_config_dir(workspace_root)
     manifest = load_manifest(config_dir)
     ws_root = workspace_root if workspace_root is not None else Path.cwd()
     client = ComposeClient()
-    return cmd_logs(patterns=argv_rest, manifest=manifest, workspace_root=ws_root, client=client)
+    return cmd_logs(
+        patterns=patterns,
+        manifest=manifest,
+        workspace_root=ws_root,
+        client=client,
+        follow=follow,
+        tail=tail,
+        since=since,
+        until=until,
+    )
 
 
 def main(argv: list[str]) -> int:
