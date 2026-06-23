@@ -179,9 +179,9 @@ def _status_for_env(
         if svc:
             svc_to_containers.setdefault(svc, []).append(ct)
 
-    # Build service entries from the manifest's declared service list.
+    # Build service entries from the scope-correct declared service list.
     # If compose reports services not in the manifest, we still include them.
-    declared_names = [s.name for s in manifest.services]
+    declared_names = [s.name for s in manifest.services_for_scope(env)]
 
     # Determine which service names to report: declared + any compose-returned extras
     all_svc_names: list[str] = list(declared_names)

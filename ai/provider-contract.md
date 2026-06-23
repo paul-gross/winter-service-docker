@@ -35,7 +35,7 @@ Host ports in `compose.yaml` use `${WSD_PORT_<NAME>}` placeholders. At `up` time
 WSD_PORT_<NAME> = WINTER_PORT_BASE + <position>
 ```
 
-where `<position>` is the 0-based index of the service's `[[service]]` entry in `config.toml` (declaration order). Reordering entries reassigns ports. Two feature environments never collide because each env's `WINTER_PORT_BASE` is unique.
+where `<position>` is the 0-based index of the service's `[[service]]` entry among **project-scoped** entries in `config.toml` (declaration order; workspace-scoped entries are excluded because they have no `WINTER_PORT_BASE`). Reordering project entries reassigns ports. Two feature environments never collide because each env's `WINTER_PORT_BASE` is unique.
 
 ## `docker logs` flag pass-through
 
@@ -51,4 +51,4 @@ Winter re-applies its own tail/time backstop, so faithfully streaming docker's o
 
 ## Workspace-scope model and named volumes
 
-The workspace scope drives a separate `<project_prefix>-workspace` compose project. There is no per-service `scope` field in `config.toml` — workspace services live in a dedicated compose file that the operator points `compose_file` at when driving `winter service up workspace`. Named volumes declared in the workspace `compose.yaml` persist across `compose down`; `down workspace` is an authoritative `docker compose down` for those containers but does not remove volumes. Remove volumes explicitly with `docker volume rm ...` if a clean slate is needed.
+The workspace scope drives a separate `<project_prefix>-workspace` compose project. Services are partitioned by the per-service `scope` field in `config.toml`: `scope = "project"` (default, per-env) or `scope = "workspace"` (singleton shared across all envs). The loader splits `[[service]]` entries into the project partition and the workspace partition at parse time; every verb (`up`, `down`, `status`, `restart`, `logs`) calls `services_for_scope(env)` to select the appropriate partition. Workspace-scoped services have `port_base = None` and receive no `WSD_PORT_*` substitution variables — they must use fixed host ports (or omit port publishing) in `compose.yaml`. Names are globally unique across both scopes (enforced at load time). Named volumes declared in the workspace `compose.yaml` persist across `compose down`; `down workspace` is an authoritative `docker compose down` for those containers but does not remove volumes. Remove volumes explicitly with `docker volume rm ...` if a clean slate is needed.

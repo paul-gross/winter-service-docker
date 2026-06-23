@@ -41,7 +41,7 @@ def _cmd_describe(workspace_root: Path | None) -> int:
             file=sys.stderr,
         )
     manifest = load_manifest(config_dir)
-    service_names = [svc.name for svc in manifest.services]
+    service_names = manifest.all_service_names()
     sys.stdout.write(json.dumps({"services": service_names}) + "\n")
     sys.stdout.flush()
     return 0

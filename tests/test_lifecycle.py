@@ -144,13 +144,13 @@ def test_is_service_ready_not_running() -> None:
 
 def test_port_env_vars_single_service() -> None:
     manifest = _make_manifest(services=["db"])
-    result = _port_env_vars(manifest, 4060)
+    result = _port_env_vars(manifest.services, 4060)
     assert result == {"WSD_PORT_DB": "4060"}
 
 
 def test_port_env_vars_multiple_services() -> None:
     manifest = _make_manifest(services=["db", "api", "worker"])
-    result = _port_env_vars(manifest, 4020)
+    result = _port_env_vars(manifest.services, 4020)
     assert result == {
         "WSD_PORT_DB": "4020",
         "WSD_PORT_API": "4021",
@@ -160,13 +160,13 @@ def test_port_env_vars_multiple_services() -> None:
 
 def test_port_env_vars_uppercase_service_name() -> None:
     manifest = _make_manifest(services=["my-service"])
-    result = _port_env_vars(manifest, 5000)
+    result = _port_env_vars(manifest.services, 5000)
     assert "WSD_PORT_MY-SERVICE" in result
 
 
 def test_port_env_vars_no_services() -> None:
     manifest = _make_manifest(services=[])
-    result = _port_env_vars(manifest, 4020)
+    result = _port_env_vars(manifest.services, 4020)
     assert result == {}
 
 
@@ -180,7 +180,7 @@ def test_build_compose_env_always_has_project_name(tmp_workspace: Path) -> None:
 
     manifest = _make_manifest(prefix="myapp", services=["db"])
     ctx = build_env_context("alpha", "myapp", tmp_workspace)
-    env = _build_compose_env(ctx, manifest)
+    env = _build_compose_env(ctx, manifest.services_for_scope("alpha"))
     assert env["COMPOSE_PROJECT_NAME"] == "myapp-alpha"
 
 
@@ -189,7 +189,7 @@ def test_build_compose_env_includes_port_vars(tmp_workspace: Path) -> None:
 
     manifest = _make_manifest(prefix="myapp", services=["db", "api"])
     ctx = build_env_context("alpha", "myapp", tmp_workspace)  # port_base=4020 from fixture
-    env = _build_compose_env(ctx, manifest)
+    env = _build_compose_env(ctx, manifest.services_for_scope("alpha"))
     assert env["WSD_PORT_DB"] == "4020"
     assert env["WSD_PORT_API"] == "4021"
 
@@ -200,7 +200,7 @@ def test_build_compose_env_no_port_vars_when_no_port_base() -> None:
 
     manifest = _make_manifest(services=["db"])
     ctx = EnvContext(env="workspace", compose_project_name="myapp-workspace", port_base=None)
-    env = _build_compose_env(ctx, manifest)
+    env = _build_compose_env(ctx, manifest.services_for_scope("workspace"))
     assert "COMPOSE_PROJECT_NAME" in env
     assert not any(k.startswith("WSD_PORT_") for k in env)
 
@@ -269,12 +269,12 @@ def test_cmd_down_compose_exception_returns_nonzero(tmp_workspace: Path) -> None
 
 
 def test_cmd_up_issues_compose_up_d(tmp_workspace: Path) -> None:
-    """up issues ``compose up -d`` with the correct project."""
+    """up issues ``compose up -d <service-names>`` with the correct project."""
     clock = FakeClock(start=0.0, advance_per_call=0.0)
     # up -d result, then ps result (healthy, no healthcheck)
     ps_containers = [_container_ps("db", "running", health_status=None)]
     fake = FakeComposeClient(compose_results=[
-        _ok_result(0),           # compose up -d
+        _ok_result(0),           # compose up -d db
         _ps_result(ps_containers),  # compose ps
     ])
     manifest = _make_manifest(prefix="myapp", services=["db"])
@@ -284,10 +284,10 @@ def test_cmd_up_issues_compose_up_d(tmp_workspace: Path) -> None:
         time_fn=clock.time, sleep_fn=clock.sleep,
     )
     assert rc == 0
-    # First call is compose up -d
+    # First call is compose up -d with scoped service names
     up_call = fake.compose_calls[0]
     assert up_call.project == "myapp-alpha"
-    assert up_call.args == ["up", "-d"]
+    assert up_call.args == ["up", "-d", "db"]
 
 
 def test_cmd_up_passes_project_name_and_port_vars(tmp_workspace: Path) -> None:

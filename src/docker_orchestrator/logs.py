@@ -177,10 +177,6 @@ def _collect_log_targets(
 
     Bare ``<env>`` tokens (no '/') match all services in that env.
     """
-    svc_names = [s.name for s in manifest.services]
-    if not svc_names:
-        return []
-
     # No patterns → treat as wildcard over whatever envs are discoverable.
     # Since we can't enumerate live envs here, return empty: the CLI caller
     # should always supply at least an env scope.
@@ -195,6 +191,7 @@ def _collect_log_targets(
     targets: list[tuple[str, str]] = []
 
     for env in envs_from:
+        svc_names = [s.name for s in manifest.services_for_scope(env)]
         for svc in svc_names:
             if service_matches_any_pattern(env, svc, patterns):
                 key = (env, svc)

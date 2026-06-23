@@ -8,7 +8,7 @@ A [winter](https://github.com/paul-gross/winter) extension that adds docker comp
 
 - **Per-env compose isolation** — every feature environment gets its own compose project named `<prefix>-<env>` (e.g. `myapp-alpha`, `myapp-beta`). Containers, networks, and volumes are automatically namespaced; no manual configuration needed.
 - **Conflict-free parallel runs** — published host ports use `${WSD_PORT_<NAME>}` substitution resolved from `WINTER_PORT_BASE`, so alpha and beta each get unique ports without collision.
-- **Workspace-scoped singletons** — shared infrastructure (databases, registries, brokers) runs in a separate `<prefix>-workspace` compose project and is driven by `winter service up/down workspace`.
+- **Workspace-scoped singletons** — shared infrastructure (databases, registries, brokers) runs in a separate `<prefix>-workspace` compose project. Declare a service with `scope = "workspace"` in `config.toml` (defaults to `"project"`) and drive it with `winter service up/down workspace`.
 - **Genuine readiness gate** — because this provider reports real container health, `winter service up <env> --wait` blocks until all containers are healthy before returning.
 - **Winter service integration** — `winter service up/down/status/restart/logs <env>` drives the full lifecycle. Coexists with `winter-service-tmux` under the multi-provider contract.
 - **Built-in doctor probe** — `winter doctor` checks that the docker daemon is reachable and compose v2 is installed, with actionable remediation on failure.

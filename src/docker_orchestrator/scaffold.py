@@ -32,11 +32,16 @@ _COMPOSE_YAML = """\
 # at runtime from the env's WINTER_PORT_BASE so two envs never collide on the
 # same host port.
 #
+# IMPORTANT: Workspace-scoped services (scope = "workspace" in config.toml) get
+# NO WSD_PORT_* variable — they run in a single shared compose project and must
+# use a fixed host port (or omit port publishing entirely).
+#
 # Named volumes persist data across `docker compose down` and survive
 # `winter ws destroy` (managed separately; the destroy hook runs compose down
 # but does not remove volumes).
 
 services:
+  # --- per-env project service ---
   backend:
     image: your-backend-image:latest
     ports:
@@ -47,6 +52,10 @@ services:
       db:
         condition: service_healthy
 
+  # --- workspace-scoped singleton (scope = "workspace" in config.toml) ---
+  # Runs in the shared <project_prefix>-workspace compose project, once for the
+  # whole workspace.  Because workspace scope has no WINTER_PORT_BASE, no
+  # WSD_PORT_DB is emitted — use a fixed host port instead.
   db:
     image: postgres:16-alpine
     environment:
@@ -54,7 +63,7 @@ services:
       POSTGRES_PASSWORD: app
       POSTGRES_DB: app
     ports:
-      - "${WSD_PORT_DB}:5432"
+      - "5432:5432"   # fixed port — workspace scope gets no WSD_PORT_* variable
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
@@ -65,9 +74,8 @@ services:
 
 volumes:
   db-data:
-    # Named volume: persists across compose down; shared by all containers in
-    # this project. Use the workspace compose project for a singleton
-    # db that persists across all feature envs (see index.md).
+    # Named volume: persists across compose down; shared across all feature envs
+    # because db runs in the workspace compose project (not per-env).
 """
 
 _CONFIG_TOML = """\
@@ -82,7 +90,7 @@ _CONFIG_TOML = """\
 #   winter ext verify <ext-dir>
 
 # Prefix for COMPOSE_PROJECT_NAME: <project_prefix>-<env>
-# e.g. "myapp" produces "myapp-alpha", "myapp-beta"
+# e.g. "myapp" produces "myapp-alpha", "myapp-beta", "myapp-workspace"
 project_prefix = "myapp"
 
 # Path to the compose file consumed by this orchestrator.
@@ -95,23 +103,38 @@ compose_file = "compose.yaml"
 #
 # Fields:
 #   name  (required) — unique identifier used in `winter service restart` and
-#                      `winter service logs` patterns.
+#                      `winter service logs` patterns.  Names are globally
+#                      unique across both scopes.
+#   scope (optional, default "project") — "project" runs the service in the
+#                      per-env <project_prefix>-<env> compose project;
+#                      "workspace" makes it a workspace-scoped singleton that
+#                      runs in <project_prefix>-workspace (shared across all
+#                      feature envs).  Drive workspace services with
+#                      `winter service up/down workspace`.
 #
 # Port substitution (WSD_PORT_<NAME> convention):
 #   Published host ports in compose.yaml should use ${WSD_PORT_<NAME>}
 #   placeholders where <NAME> is the upper-cased service name.
 #   winter-service-docker resolves WSD_PORT_<NAME> = WINTER_PORT_BASE + <position>
-#   at runtime, where <position> is the 0-based declaration order of the
-#   [[service]] entry in this file.  Reordering entries reassigns ports.
-#   Example: backend (position 0) → WINTER_PORT_BASE + 0
-#            db      (position 1) → WINTER_PORT_BASE + 1
+#   at runtime, where <position> is the 0-based declaration order among
+#   PROJECT-scoped [[service]] entries (workspace-scoped entries are excluded
+#   from port assignment because they have no WINTER_PORT_BASE).
+#   Reordering project entries reassigns ports.
+#   Example: backend (project, position 0) → WINTER_PORT_BASE + 0
+#   Workspace-scoped services must use fixed host ports (or omit port
+#   publishing) — no WSD_PORT_* is emitted for them.
 # ---------------------------------------------------------------------------
 
 [[service]]
 name = "backend"
+# scope = "project"  # default — runs per-env in <project_prefix>-<env>
 
 [[service]]
+# Workspace-scoped singleton: runs once in <project_prefix>-workspace,
+# shared across all feature envs.  No WSD_PORT_DB is emitted — use a
+# fixed host port in compose.yaml instead.
 name = "db"
+scope = "workspace"
 """
 
 # ---------------------------------------------------------------------------

@@ -12,6 +12,7 @@ Manifest schema (``config.toml``):
 
     [[service]]
     name = "backend"                  # optional list of declared services
+    scope = "project"                 # "project" (default) or "workspace"
 
 Config dir is resolved at call time; the reader is stateless and re-reads on
 every ``load()`` call (no caching — callers may invoke once and hold the result).
@@ -28,6 +29,10 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from docker_orchestrator.env_context import WORKSPACE_SCOPE
+
+_VALID_SCOPES = ("project", "workspace")
+
 
 @dataclass(frozen=True)
 class ServiceDecl:
@@ -43,11 +48,34 @@ class DockerManifest:
     ``project_prefix`` and ``compose_file`` are ``None`` when the config file is
     absent or the field is missing — callers that require these fields should
     check and emit a useful error.
+
+    ``services`` holds project-scoped services (``scope = "project"``).
+    ``workspace_services`` holds workspace-scoped services (``scope = "workspace"``).
+    Names are unique across both partitions (global namespace enforced at load time).
     """
 
     project_prefix: str | None
     compose_file: str | None
     services: tuple[ServiceDecl, ...] = field(default_factory=tuple)
+    workspace_services: tuple[ServiceDecl, ...] = field(default_factory=tuple)
+
+    def services_for_scope(self, env: str) -> tuple[ServiceDecl, ...]:
+        """Return the services relevant to *env*.
+
+        Returns ``workspace_services`` when *env* is the reserved ``"workspace"``
+        scope; returns ``services`` for any other env name.
+        """
+        if env == WORKSPACE_SCOPE:
+            return self.workspace_services
+        return self.services
+
+    def all_service_names(self) -> list[str]:
+        """Return all service names in declaration order: project services first, then workspace.
+
+        This is the canonical enumeration used by ``describe`` to list every
+        managed service regardless of scope.
+        """
+        return [s.name for s in self.services] + [s.name for s in self.workspace_services]
 
 
 _DEFAULT_CONFIG_SUBDIR = ".winter/config/winter-service-docker"
@@ -116,14 +144,30 @@ def load(config_dir: Path | None = None) -> DockerManifest:
 
     raw_services: list[dict] = doc.get("service", [])  # type: ignore[type-arg]
     services: list[ServiceDecl] = []
+    workspace_services: list[ServiceDecl] = []
+    seen_names: set[str] = set()
     for i, raw in enumerate(raw_services):
         name = raw.get("name")
         if not name or not isinstance(name, str):
             raise ValueError(f"[[service]] entry #{i} is missing a valid 'name' field")
-        services.append(ServiceDecl(name=name))
+        scope = raw.get("scope", "project")
+        if scope not in _VALID_SCOPES:
+            raise ValueError(
+                f"[[service]] entry '{name}' has invalid scope {scope!r};"
+                f" allowed: 'project', 'workspace'"
+            )
+        if name in seen_names:
+            raise ValueError(f"[[service]] entry '{name}' has a duplicate name")
+        seen_names.add(name)
+        decl = ServiceDecl(name=name)
+        if scope == "workspace":
+            workspace_services.append(decl)
+        else:
+            services.append(decl)
 
     return DockerManifest(
         project_prefix=project_prefix,
         compose_file=compose_file,
         services=tuple(services),
+        workspace_services=tuple(workspace_services),
     )

@@ -50,9 +50,16 @@ def _make_manifest(
     prefix: str = "myapp",
     compose_file: str = "compose.yaml",
     services: list[str] | None = None,
+    workspace_services: list[str] | None = None,
 ) -> DockerManifest:
     svcs = tuple(ServiceDecl(name=s) for s in (services or ["db", "api"]))
-    return DockerManifest(project_prefix=prefix, compose_file=compose_file, services=svcs)
+    ws_svcs = tuple(ServiceDecl(name=s) for s in (workspace_services or []))
+    return DockerManifest(
+        project_prefix=prefix,
+        compose_file=compose_file,
+        services=svcs,
+        workspace_services=ws_svcs,
+    )
 
 
 def _ok_result(returncode: int = 0) -> subprocess.CompletedProcess:
@@ -261,11 +268,11 @@ class TestUpWorkspace:
         """cmd_up for workspace sets COMPOSE_PROJECT_NAME=<prefix>-workspace."""
         client = FakeComposeClient(
             compose_results=[
-                _ok_result(0),  # compose up -d
+                _ok_result(0),  # compose up -d db
                 _ps_result([_running_container("db")]),  # readiness ps poll
             ]
         )
-        manifest = _make_manifest(prefix="myapp", services=["db"])
+        manifest = _make_manifest(prefix="myapp", workspace_services=["db"])
         time_fn, sleep_fn = self._clock()
         rc = cmd_up(
             "workspace", manifest, tmp_path, client,
@@ -283,7 +290,7 @@ class TestUpWorkspace:
                 _ps_result([_running_container("db")]),
             ]
         )
-        manifest = _make_manifest(prefix="myapp", services=["db"])
+        manifest = _make_manifest(prefix="myapp", workspace_services=["db"])
         time_fn, sleep_fn = self._clock()
         cmd_up(
             "workspace", manifest, tmp_path, client,
@@ -302,7 +309,7 @@ class TestUpWorkspace:
                 _ps_result([_running_container("db")]),
             ]
         )
-        manifest = _make_manifest(prefix="myapp", services=["db"])
+        manifest = _make_manifest(prefix="myapp", workspace_services=["db"])
         time_fn, sleep_fn = self._clock()
         cmd_up(
             "workspace", manifest, tmp_path, client,
@@ -318,7 +325,7 @@ class TestUpWorkspace:
 
         ctx = build_env_context("workspace", "myapp", tmp_path)
         manifest = _make_manifest(services=["db", "api"])
-        env = _build_compose_env(ctx, manifest)
+        env = _build_compose_env(ctx, manifest.services_for_scope("workspace"))
         assert env["COMPOSE_PROJECT_NAME"] == "myapp-workspace"
         wsd_keys = [k for k in env if k.startswith("WSD_PORT_")]
         assert wsd_keys == []
@@ -341,7 +348,7 @@ class TestStatusWorkspace:
                 subprocess.CompletedProcess([], 0, stdout=ps_json, stderr="")
             ]
         )
-        manifest = _make_manifest(prefix="myapp", services=["db"])
+        manifest = _make_manifest(prefix="myapp", workspace_services=["db"])
         out = StringIO()
         old_stdout = sys.stdout
         sys.stdout = out
@@ -366,7 +373,7 @@ class TestStatusWorkspace:
                 subprocess.CompletedProcess([], 0, stdout=ps_json, stderr="")
             ]
         )
-        manifest = _make_manifest(prefix="myapp", services=["db"])
+        manifest = _make_manifest(prefix="myapp", workspace_services=["db"])
         out = StringIO()
         old_stdout = sys.stdout
         sys.stdout = out
@@ -386,7 +393,7 @@ class TestStatusWorkspace:
                 subprocess.CompletedProcess([], 0, stdout="", stderr="")
             ]
         )
-        manifest = _make_manifest(prefix="myapp", services=["db"])
+        manifest = _make_manifest(prefix="myapp", workspace_services=["db"])
         out = StringIO()
         old_stdout = sys.stdout
         sys.stdout = out
@@ -407,7 +414,7 @@ class TestStatusWorkspace:
                 subprocess.CompletedProcess([], 0, stdout=ps_json, stderr="")
             ]
         )
-        manifest = _make_manifest(prefix="myapp", services=["db"])
+        manifest = _make_manifest(prefix="myapp", workspace_services=["db"])
         out = StringIO()
         old_stdout = sys.stdout
         sys.stdout = out
@@ -434,7 +441,7 @@ class TestRestartWorkspace:
     def test_restart_workspace_svc_project_name(self, tmp_path: Path) -> None:
         """cmd_restart workspace/db uses project <prefix>-workspace."""
         client = FakeComposeClient(compose_results=[_ok_result(0)])
-        manifest = _make_manifest(prefix="myapp", services=["db"])
+        manifest = _make_manifest(prefix="myapp", workspace_services=["db"])
         rc = cmd_restart(["workspace/db"], manifest, tmp_path, client)
         assert rc == 0
         assert len(client.compose_calls) == 1
@@ -444,7 +451,7 @@ class TestRestartWorkspace:
     def test_restart_workspace_svc_args(self, tmp_path: Path) -> None:
         """cmd_restart workspace/db issues ['restart', 'db'] args."""
         client = FakeComposeClient(compose_results=[_ok_result(0)])
-        manifest = _make_manifest(prefix="myapp", services=["db"])
+        manifest = _make_manifest(prefix="myapp", workspace_services=["db"])
         cmd_restart(["workspace/db"], manifest, tmp_path, client)
         call = client.compose_calls[0]
         assert call.args == ["restart", "db"]
@@ -454,7 +461,7 @@ class TestRestartWorkspace:
         client = FakeComposeClient(
             compose_results=[_ok_result(0), _ok_result(0)]
         )
-        manifest = _make_manifest(prefix="myapp", services=["db", "api"])
+        manifest = _make_manifest(prefix="myapp", workspace_services=["db", "api"])
         rc = cmd_restart(["workspace/*"], manifest, tmp_path, client)
         assert rc == 0
         assert len(client.compose_calls) == 2
@@ -465,7 +472,7 @@ class TestRestartWorkspace:
         """_collect_restart_targets for workspace/db returns [('workspace', 'db')]."""
         from docker_orchestrator.restart import _collect_restart_targets
 
-        manifest = _make_manifest(prefix="myapp", services=["db"])
+        manifest = _make_manifest(prefix="myapp", workspace_services=["db"])
         targets = _collect_restart_targets(["workspace/db"], manifest)
         assert targets == [("workspace", "db")]
 
@@ -485,7 +492,7 @@ class TestLogsWorkspace:
                 subprocess.CompletedProcess([], 0, stdout="", stderr="")
             ]
         )
-        manifest = _make_manifest(prefix="myapp", services=["db"])
+        manifest = _make_manifest(prefix="myapp", workspace_services=["db"])
         sink = StringIO()
         cmd_logs(["workspace/db"], manifest, tmp_path, client, sink=sink)
         assert len(client.compose_calls) == 1
@@ -499,7 +506,7 @@ class TestLogsWorkspace:
                 subprocess.CompletedProcess([], 0, stdout=log_line, stderr="")
             ]
         )
-        manifest = _make_manifest(prefix="myapp", services=["db"])
+        manifest = _make_manifest(prefix="myapp", workspace_services=["db"])
         sink = StringIO()
         cmd_logs(["workspace/db"], manifest, tmp_path, client, sink=sink)
         lines = [ln for ln in sink.getvalue().splitlines() if ln.strip()]
@@ -509,14 +516,14 @@ class TestLogsWorkspace:
         assert event["svc"] == "db"
 
     def test_logs_workspace_bare_pattern(self, tmp_path: Path) -> None:
-        """Bare 'workspace' pattern matches all declared services."""
+        """Bare 'workspace' pattern matches all declared workspace services."""
         client = FakeComposeClient(
             compose_results=[
                 subprocess.CompletedProcess([], 0, stdout="", stderr=""),
                 subprocess.CompletedProcess([], 0, stdout="", stderr=""),
             ]
         )
-        manifest = _make_manifest(prefix="myapp", services=["db", "api"])
+        manifest = _make_manifest(prefix="myapp", workspace_services=["db", "api"])
         sink = StringIO()
         rc = cmd_logs(["workspace"], manifest, tmp_path, client, sink=sink)
         assert rc == 0

@@ -53,10 +53,6 @@ def _collect_restart_targets(
 
     Returns unique ``(env, svc)`` pairs in pattern/manifest order.
     """
-    svc_names = [s.name for s in manifest.services]
-    if not svc_names:
-        return []
-
     # Normalise patterns: expand bare tokens (no '/') to <token>/* so they
     # match services across all envs named <token>.  If the caller intended
     # a bare service name without an env, _envs_from_patterns returns the
@@ -75,6 +71,7 @@ def _collect_restart_targets(
     targets: list[tuple[str, str]] = []
 
     for env in envs_from:
+        svc_names = [s.name for s in manifest.services_for_scope(env)]
         for svc in svc_names:
             if service_matches_any_pattern(env, svc, patterns):
                 key = (env, svc)

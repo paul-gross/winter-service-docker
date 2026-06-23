@@ -51,7 +51,7 @@ from typing import Callable
 from docker_orchestrator.compose_client import ComposeClient
 from docker_orchestrator.compose_ps import extract_health, parse_compose_ps_output
 from docker_orchestrator.env_context import EnvContext, build_env_context
-from docker_orchestrator.manifest import DockerManifest
+from docker_orchestrator.manifest import DockerManifest, ServiceDecl
 
 
 # ---------------------------------------------------------------------------
@@ -59,32 +59,41 @@ from docker_orchestrator.manifest import DockerManifest
 # ---------------------------------------------------------------------------
 
 
-def _port_env_vars(manifest: DockerManifest, port_base: int) -> dict[str, str]:
+def _port_env_vars(
+    services: tuple[ServiceDecl, ...], port_base: int
+) -> dict[str, str]:
     """Build the ``WSD_PORT_<SVC>`` env vars for the compose invocation.
 
-    One entry per declared service, keyed by ``WSD_PORT_<UPPERCASE_NAME>``,
-    value is ``str(port_base + index)``.  Returns an empty dict when the
-    manifest has no declared services.
+    One entry per service in *services*, keyed by ``WSD_PORT_<UPPERCASE_NAME>``,
+    value is ``str(port_base + index)``.  Offsets are numbered over the supplied
+    tuple so that scope partitioning does not shift per-env port assignments.
+    Returns an empty dict when *services* is empty.
     """
     return {
         f"WSD_PORT_{svc.name.upper()}": str(port_base + i)
-        for i, svc in enumerate(manifest.services)
+        for i, svc in enumerate(services)
     }
 
 
-def _build_compose_env(ctx: EnvContext, manifest: DockerManifest) -> dict[str, str]:
+def _build_compose_env(
+    ctx: EnvContext,
+    scoped_services: tuple[ServiceDecl, ...],
+) -> dict[str, str]:
     """Build the environment dict to pass to compose invocations.
 
     Starts from the current process environment (so PATH and other shell vars
     are inherited), then overlays ``COMPOSE_PROJECT_NAME`` and, when
-    ``ctx.port_base`` is not None, the ``WSD_PORT_*`` port-substitution vars.
+    ``ctx.port_base`` is not None, the ``WSD_PORT_*`` port-substitution vars
+    indexed over *scoped_services* (the scope-appropriate service subset).
+
+    Workspace scope has ``port_base=None`` and emits no ``WSD_PORT_*`` vars.
     """
     import os
 
     env: dict[str, str] = dict(os.environ)
     env["COMPOSE_PROJECT_NAME"] = ctx.compose_project_name
     if ctx.port_base is not None:
-        env.update(_port_env_vars(manifest, ctx.port_base))
+        env.update(_port_env_vars(scoped_services, ctx.port_base))
     return env
 
 
@@ -178,13 +187,21 @@ def cmd_down(
         return 1
 
     ctx: EnvContext = build_env_context(env, manifest.project_prefix, workspace_root)
-    compose_env = _build_compose_env(ctx, manifest)
+    scoped_services: tuple[ServiceDecl, ...] = manifest.services_for_scope(env)
+    compose_env = _build_compose_env(ctx, scoped_services)
 
     print(
         f"docker-orchestrator: down: stopping {ctx.compose_project_name}",
         file=sys.stderr,
     )
 
+    # "compose down" is project-level teardown and does not accept service-name
+    # filters the way "up" does.  Because the compose project name is already
+    # scope-specific (<prefix>-<env> vs <prefix>-workspace) and "up" only ever
+    # starts scoped services inside that project, a whole-project "down" is both
+    # correct and sufficient — it tears down exactly what "up" started.
+    # If scoped_services is empty here the project was never started, so "down"
+    # is a harmless no-op (compose exits 0 on an unknown/empty project).
     try:
         result = client.compose(
             ctx.compose_project_name,
@@ -250,19 +267,36 @@ def cmd_up(
         return 1
 
     ctx: EnvContext = build_env_context(env, manifest.project_prefix, workspace_root)
-    compose_env = _build_compose_env(ctx, manifest)
+    scoped_services: tuple[ServiceDecl, ...] = manifest.services_for_scope(env)
+    compose_env = _build_compose_env(ctx, scoped_services)
+
+    # Guard: if no services belong to this scope, skip the compose call entirely.
+    # Calling "compose up -d" with no service-name args would start ALL services
+    # in the compose file, which defeats scope isolation.
+    if not scoped_services:
+        scope_label = "workspace" if ctx.env == "workspace" else ctx.env
+        print(
+            f"docker-orchestrator: up: no {scope_label} services declared; nothing to start",
+            file=sys.stderr,
+        )
+        return 0
 
     print(
         f"docker-orchestrator: up: starting {ctx.compose_project_name}",
         file=sys.stderr,
     )
 
-    # Step 1: compose up -d
+    # Step 1: compose up -d <service-names...>
+    # Pass the scoped service names as positional args so compose only starts the
+    # services belonging to this scope.  The single compose.yaml contains services
+    # for ALL scopes; without explicit names "up -d" would start every service,
+    # causing workspace-scoped services to run per-env and vice versa.
+    service_names = [s.name for s in scoped_services]
     try:
         result = client.compose(
             ctx.compose_project_name,
             manifest.compose_file,
-            ["up", "-d"],
+            ["up", "-d", *service_names],
             env=compose_env,
         )
     except (OSError, subprocess.SubprocessError) as exc:

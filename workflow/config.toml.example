@@ -26,30 +26,63 @@ compose_file = "compose.yaml"
 #
 # Fields:
 #   name  (required) — unique identifier used in restart and logs patterns.
+#                      Names are globally unique across both scopes.
+#   scope (optional, default "project") — "project" runs the service in the
+#                      per-env <project_prefix>-<env> compose project;
+#                      "workspace" makes it a workspace-scoped singleton that
+#                      runs in <project_prefix>-workspace (shared across all
+#                      feature envs).  Drive workspace services with
+#                      `winter service up/down workspace`.
 #
 # WSD_PORT_<NAME> port-substitution convention:
 #   Published host ports in compose.yaml should use ${WSD_PORT_<NAME>}
 #   placeholders where <NAME> is the UPPER-CASED service name.
 #   winter-service-docker substitutes WINTER_PORT_BASE + <position> at runtime,
-#   where <position> is the 0-based declaration order of the [[service]] entry
-#   in this file. Reordering entries reassigns ports.
+#   where <position> is the 0-based declaration order among PROJECT-scoped
+#   [[service]] entries (workspace-scoped entries are excluded from port
+#   assignment because they have no WINTER_PORT_BASE). Reordering project
+#   entries reassigns ports.
 #
-#   Example with WINTER_PORT_BASE=4060 (gamma env):
+#   Example with WINTER_PORT_BASE=4060 (gamma env), project-scoped services only:
 #     backend (position 0) → WSD_PORT_BACKEND = 4060
-#     db      (position 1) → WSD_PORT_DB      = 4061
+#     worker  (position 1) → WSD_PORT_WORKER  = 4061
+#   Reordering these two entries would swap their ports. Alpha (port_base=4020),
+#   beta (4040), and gamma (4060) each get unique host ports automatically.
 #
-#   Alpha (port_base=4020), beta (4040), gamma (4060) each get unique host
-#   ports for every service without manual configuration.
-#
-# Workspace scope:
-#   Workspace-scoped singleton services (shared across all feature envs) live
-#   in a separate compose project named <project_prefix>-workspace. Drive them
-#   with `winter service up/down workspace` — no per-service scope field is
-#   needed in this file.  See index.md for the workspace-scope model.
+#   Workspace-scoped services have no WINTER_PORT_BASE, so no WSD_PORT_* is
+#   emitted for them — use fixed host ports in compose.yaml instead.
 # ---------------------------------------------------------------------------
 
 [[service]]
 name = "backend"
+# scope = "project"  # default — runs per-env in <project_prefix>-<env>
 
 [[service]]
+name = "worker"
+# scope = "project"  # default — runs per-env in <project_prefix>-<env>
+
+# ---------------------------------------------------------------------------
+# Workspace-scoped singleton services
+# ---------------------------------------------------------------------------
+#
+# A [[service]] entry with scope = "workspace" runs in a SEPARATE compose
+# project named <project_prefix>-workspace, created once for the whole
+# workspace rather than once per feature env.  These are shared across all
+# feature environments and are intended for long-running infrastructure that
+# should not be duplicated per-env (e.g. a shared database, a registry).
+#
+# scope is the only field that distinguishes a workspace singleton from a
+# per-env service:
+#   scope = "project"   (DEFAULT, may be omitted) — per-env service, runs in
+#                       the <project_prefix>-<env> compose project.
+#   scope = "workspace" — workspace singleton, runs in <project_prefix>-workspace.
+# The name field is declared the same way as for any project service.
+#
+# Name uniqueness is GLOBAL across both scopes — a project and a workspace
+# service may not share a name.
+
+[[service]]
+# Shared database singleton — runs once in <project_prefix>-workspace.
+# No WSD_PORT_DB is emitted; use a fixed port in compose.yaml.
 name = "db"
+scope = "workspace"
