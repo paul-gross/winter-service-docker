@@ -23,6 +23,7 @@ from pathlib import Path
 
 WORKSPACE_SCOPE = "workspace"
 _WINTER_ENV_FILE = ".winter.env"
+_WINTER_WORKSPACE_ENV_FILE = ".winter.workspace.env"
 
 
 def _parse_env_file(text: str) -> dict[str, str]:
@@ -74,6 +75,30 @@ def read_port_base(workspace_root: Path, env: str) -> int | None:
         return int(raw)
     except ValueError:
         return None
+
+
+def resolve_env_file(workspace_root: Path, env: str) -> str | None:
+    """Return the winter-seeded env file to *source* before a compose invocation.
+
+    Feature env  → ``<workspace>/<env>/.winter.env``.
+    Workspace scope → ``<workspace>/.winter.workspace.env`` (the index-0 band that
+    ``winter ws init`` seeds for workspace-scoped services).
+
+    Returns the absolute path as a string when the file exists, else ``None`` —
+    in which case sourcing is skipped and ``docker compose`` runs with the
+    unmodified process environment.
+
+    The orchestrator *sources* this file in a shell before exec'ing compose (it
+    does not merely parse it), so the file may carry shell arithmetic — e.g.
+    ``WTS_DB_PORT=$((WINTER_PORT_BASE + 12))`` — evaluated by the shell and
+    exported into the environment ``docker compose`` inherits. This mirrors how
+    winter-service-tmux ``source``s the same file for each service pane.
+    """
+    if env == WORKSPACE_SCOPE:
+        env_file = workspace_root / _WINTER_WORKSPACE_ENV_FILE
+    else:
+        env_file = workspace_root / env / _WINTER_ENV_FILE
+    return str(env_file) if env_file.exists() else None
 
 
 def compose_project_name(project_prefix: str, env: str) -> str:

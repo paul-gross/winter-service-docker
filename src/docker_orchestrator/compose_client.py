@@ -27,6 +27,29 @@ StreamResult = tuple[Iterator[str], Callable[[], int]]
 StreamRunner = Callable[..., StreamResult]
 
 
+# The shell script used to source a winter env file before exec'ing the real
+# command.  ``set -a`` (allexport) makes every assignment performed while
+# sourcing automatically exported, so the exec'd child inherits them — including
+# values produced by shell arithmetic such as ``WTS_DB_PORT=$((WINTER_PORT_BASE+12))``.
+# The env-file path arrives as ``$1`` and the real argv as ``$2..`` (via ``"$@"``
+# after ``shift``), so no shell-quoting of the docker argv is required and the
+# invocation is injection-safe.
+_SOURCE_WRAPPER = 'set -a; . "$1"; set +a; shift; exec "$@"'
+
+
+def _wrap_for_source(cmd: list[str], source_env_file: str | None) -> list[str]:
+    """Wrap *cmd* so *source_env_file* is sourced in a shell before exec.
+
+    Returns *cmd* unchanged when *source_env_file* is ``None``.  Otherwise returns
+    a ``bash -c`` invocation that sources the file (evaluating and exporting its
+    ``KEY=VAL`` lines and ``$((...))`` arithmetic) and then exec's the original
+    command, which inherits every exported variable.
+    """
+    if source_env_file is None:
+        return cmd
+    return ["bash", "-c", _SOURCE_WRAPPER, "bash", source_env_file, *cmd]
+
+
 def _default_runner(args: list[str], **kwargs: Any) -> CompletedProcess:
     return subprocess.run(args, **kwargs)
 
@@ -82,6 +105,7 @@ class ComposeClient:
         capture_output: bool = False,
         check: bool = False,
         env: dict[str, str] | None = None,
+        source_env_file: str | None = None,
     ) -> CompletedProcess:
         """Run ``docker compose -p <project> -f <compose_file> <args...>``.
 
@@ -92,8 +116,13 @@ class ComposeClient:
             capture_output: When True, capture stdout/stderr into the result.
             check: When True, raise ``subprocess.CalledProcessError`` on non-zero exit.
             env: Override the subprocess environment; None inherits the current env.
+            source_env_file: When set, the invocation is wrapped in a shell that
+                ``source``s this file (allexport) before exec'ing docker compose,
+                so the file's vars — including ``$((...))`` arithmetic — are
+                exported into compose's environment for ``${VAR}`` interpolation.
         """
         cmd = ["docker", "compose", "-p", project, "-f", compose_file, *args]
+        cmd = _wrap_for_source(cmd, source_env_file)
         return self._run(
             cmd,
             capture_output=capture_output,
@@ -134,6 +163,7 @@ class ComposeClient:
         args: list[str],
         *,
         env: dict[str, str] | None = None,
+        source_env_file: str | None = None,
     ) -> StreamResult:
         """Run ``docker compose -p <project> -f <compose_file> <args...>`` as a stream.
 
@@ -149,6 +179,10 @@ class ComposeClient:
             compose_file: Path to the compose file.
             args: Remaining arguments forwarded verbatim.
             env: Override the subprocess environment; None inherits the current env.
+            source_env_file: When set, the invocation is wrapped in a shell that
+                ``source``s this file before exec'ing docker compose (see
+                ``compose``).
         """
         cmd = ["docker", "compose", "-p", project, "-f", compose_file, *args]
+        cmd = _wrap_for_source(cmd, source_env_file)
         return self._stream(cmd, env=env)

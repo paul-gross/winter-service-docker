@@ -365,7 +365,7 @@ def test_cmd_logs_follow_broken_pipe_returns_0(tmp_path: Path) -> None:
         def compose(self, *a, **kw):
             return subprocess.CompletedProcess([], 0, stdout="", stderr="")
 
-        def compose_stream(self, project, compose_file, args, *, env=None):
+        def compose_stream(self, project, compose_file, args, *, env=None, source_env_file=None):
             self.compose_stream_calls.append((project, args))
             return _bp_iter(), lambda: 0
 

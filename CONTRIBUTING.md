@@ -38,6 +38,8 @@ The `docker_orchestrator` runtime has no third-party dependencies (stdlib-only).
 
 Unit tests never require a running docker daemon. All docker and `docker compose` calls go through the injectable `ComposeClient` seam (`src/docker_orchestrator/compose_client.py`). Tests use `FakeComposeClient` or `FakeRunner` from `tests/fakes.py` to record invocations and return canned results.
 
+One deliberate exception: the env-file sourcing feature carries a handful of real-`bash` tests (`tests/test_sourcing.py::TestRealShellSourcing`) that shell out to actual `bash` to prove the env file's `$((...))` arithmetic is evaluated and exported — the whole point of sourcing rather than parsing. They are guarded by `@pytest.mark.skipif(shutil.which("bash") is None)` and are distinct from the no-docker rule. Don't "fix" them to use a fake; a fake can't prove a real shell evaluates the arithmetic.
+
 To test the doctor probe (which calls real docker binaries) or hooks, run them directly with appropriate env vars:
 
 ```bash

@@ -138,6 +138,7 @@ class ComposeCall:
     capture_output: bool = False
     check: bool = False
     env: dict[str, str] | None = None
+    source_env_file: str | None = None
 
 
 @dataclass
@@ -148,6 +149,7 @@ class ComposeStreamCall:
     compose_file: str
     args: list[str]
     env: dict[str, str] | None = None
+    source_env_file: str | None = None
 
 
 @dataclass
@@ -204,9 +206,18 @@ class FakeComposeClient:
         capture_output: bool = False,
         check: bool = False,
         env: dict[str, str] | None = None,
+        source_env_file: str | None = None,
     ) -> CompletedProcess:
         self.compose_calls.append(
-            ComposeCall(project=project, compose_file=compose_file, args=args, capture_output=capture_output, check=check, env=env)
+            ComposeCall(
+                project=project,
+                compose_file=compose_file,
+                args=args,
+                capture_output=capture_output,
+                check=check,
+                env=env,
+                source_env_file=source_env_file,
+            )
         )
         if self._compose_results:
             return self._compose_results.pop(0)
@@ -219,9 +230,16 @@ class FakeComposeClient:
         args: list[str],
         *,
         env: dict[str, str] | None = None,
+        source_env_file: str | None = None,
     ) -> StreamResult:
         self.compose_stream_calls.append(
-            ComposeStreamCall(project=project, compose_file=compose_file, args=args, env=env)
+            ComposeStreamCall(
+                project=project,
+                compose_file=compose_file,
+                args=args,
+                env=env,
+                source_env_file=source_env_file,
+            )
         )
         if self._compose_stream_results:
             lines, code = self._compose_stream_results.pop(0)

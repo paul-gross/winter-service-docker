@@ -28,7 +28,7 @@ import sys
 from pathlib import Path
 
 from docker_orchestrator.compose_client import ComposeClient
-from docker_orchestrator.env_context import build_env_context
+from docker_orchestrator.env_context import build_env_context, resolve_env_file
 from docker_orchestrator.manifest import DockerManifest
 from docker_orchestrator.patterns import envs_from_patterns, service_matches_any_pattern
 
@@ -136,6 +136,7 @@ def cmd_restart(
                 ctx.compose_project_name,
                 manifest.compose_file,
                 ["restart", svc],
+                source_env_file=resolve_env_file(workspace_root, env),
             )
         except (OSError, subprocess.SubprocessError) as exc:
             print(

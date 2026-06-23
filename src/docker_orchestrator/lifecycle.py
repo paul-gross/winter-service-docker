@@ -50,7 +50,7 @@ from typing import Callable
 
 from docker_orchestrator.compose_client import ComposeClient
 from docker_orchestrator.compose_ps import extract_health, parse_compose_ps_output
-from docker_orchestrator.env_context import EnvContext, build_env_context
+from docker_orchestrator.env_context import EnvContext, build_env_context, resolve_env_file
 from docker_orchestrator.manifest import DockerManifest, ServiceDecl
 
 
@@ -127,6 +127,7 @@ def _poll_readiness(
     compose_file: str,
     client: ComposeClient,
     compose_env: dict[str, str],
+    source_env_file: str | None = None,
 ) -> tuple[bool, str]:
     """Poll ``compose ps --all`` once and return (all_ready, unready_service_name).
 
@@ -144,6 +145,7 @@ def _poll_readiness(
         ["ps", "--all", "--format", "json"],
         capture_output=True,
         env=compose_env,
+        source_env_file=source_env_file,
     )
     containers = parse_compose_ps_output(result.stdout or "")
     if not containers:
@@ -189,6 +191,7 @@ def cmd_down(
     ctx: EnvContext = build_env_context(env, manifest.project_prefix, workspace_root)
     scoped_services: tuple[ServiceDecl, ...] = manifest.services_for_scope(env)
     compose_env = _build_compose_env(ctx, scoped_services)
+    source_env_file = resolve_env_file(workspace_root, env)
 
     print(
         f"docker-orchestrator: down: stopping {ctx.compose_project_name}",
@@ -208,6 +211,7 @@ def cmd_down(
             manifest.compose_file,
             ["down"],
             env=compose_env,
+            source_env_file=source_env_file,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         print(f"docker-orchestrator: down: compose error: {exc}", file=sys.stderr)
@@ -269,6 +273,7 @@ def cmd_up(
     ctx: EnvContext = build_env_context(env, manifest.project_prefix, workspace_root)
     scoped_services: tuple[ServiceDecl, ...] = manifest.services_for_scope(env)
     compose_env = _build_compose_env(ctx, scoped_services)
+    source_env_file = resolve_env_file(workspace_root, env)
 
     # Guard: if no services belong to this scope, skip the compose call entirely.
     # Calling "compose up -d" with no service-name args would start ALL services
@@ -298,6 +303,7 @@ def cmd_up(
             manifest.compose_file,
             ["up", "-d", *service_names],
             env=compose_env,
+            source_env_file=source_env_file,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         print(f"docker-orchestrator: up: compose error: {exc}", file=sys.stderr)
@@ -324,6 +330,7 @@ def cmd_up(
             manifest.compose_file,
             client,
             compose_env,
+            source_env_file=source_env_file,
         )
         if ready:
             print(
