@@ -25,7 +25,7 @@ from pathlib import Path
 
 from docker_orchestrator.manifest import load as load_manifest
 
-_KNOWN_ACTIONS = frozenset({"up", "down", "status", "restart", "logs", "describe"})
+_KNOWN_ACTIONS = frozenset({"up", "down", "status", "restart", "logs", "describe", "catalog"})
 _UNKNOWN_EXIT = 2
 _REFUSE_EXIT = 3
 
@@ -43,6 +43,34 @@ def _cmd_describe(workspace_root: Path | None) -> int:
     manifest = load_manifest(config_dir)
     service_names = manifest.all_service_names()
     sys.stdout.write(json.dumps({"services": service_names}) + "\n")
+    sys.stdout.flush()
+    return 0
+
+
+def _cmd_catalog(workspace_root: Path | None) -> int:
+    """Emit scope-qualified service names as ``{"services": [...]}`` JSON.
+
+    Returns ``workspace/<name>`` for workspace-scoped services and ``*/<name>``
+    for project-scoped services (env-agnostic; any env may run them).  An absent
+    or empty manifest returns an empty list rather than an error — the lint check
+    distinguishes "no catalog" from "unknown reference".
+    """
+    from docker_orchestrator.manifest import resolve_config_dir
+
+    config_dir = resolve_config_dir(workspace_root)
+    try:
+        manifest = load_manifest(config_dir)
+    except ValueError:
+        sys.stdout.write(json.dumps({"services": []}) + "\n")
+        sys.stdout.flush()
+        return 0
+
+    names: list[str] = []
+    for svc in manifest.workspace_services:
+        names.append(f"workspace/{svc.name}")
+    for svc in manifest.services:
+        names.append(f"*/{svc.name}")
+    sys.stdout.write(json.dumps({"services": names}) + "\n")
     sys.stdout.flush()
     return 0
 
@@ -87,8 +115,12 @@ def _cmd_up(argv_rest: list[str], workspace_root: Path | None) -> int:
     _timeout = float(os.environ.get("WSD_UP_TIMEOUT", "120"))
     _poll_interval = float(os.environ.get("WSD_UP_POLL_INTERVAL", "2"))
     return cmd_up(
-        env=env, manifest=manifest, workspace_root=ws_root, client=client,
-        timeout=_timeout, poll_interval=_poll_interval,
+        env=env,
+        manifest=manifest,
+        workspace_root=ws_root,
+        client=client,
+        timeout=_timeout,
+        poll_interval=_poll_interval,
     )
 
 
@@ -172,6 +204,9 @@ def main(argv: list[str]) -> int:
 
     ws_dir = os.environ.get("WINTER_WORKSPACE_DIR")
     workspace_root = Path(ws_dir) if ws_dir else None
+
+    if action == "catalog":
+        return _cmd_catalog(workspace_root)
 
     if action == "describe":
         return _cmd_describe(workspace_root)
