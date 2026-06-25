@@ -6,13 +6,16 @@ var is unset.
 
 Manifest schema (``config.toml``):
 
-    project_prefix = "myapp"          # required — prefix for COMPOSE_PROJECT_NAME
-    compose_file   = "compose.yaml"   # required — path to the user-supplied compose file
-                                      #   (relative to the config dir or absolute)
+    project_prefix          = "myapp"                  # required
+    environment_compose_file = "environment-compose.yaml"  # required — per-env services
+    workspace_compose_file   = "workspace-compose.yaml"    # required — workspace singletons
 
     [[service]]
     name = "backend"                  # optional list of declared services
     scope = "project"                 # "project" (default) or "workspace"
+
+Back-compat: The legacy single ``compose_file`` key is detected and rejected
+with a clear migration message directing the user to split into two files.
 
 Config dir is resolved at call time; the reader is stateless and re-reads on
 every ``load()`` call (no caching — callers may invoke once and hold the result).
@@ -45,9 +48,10 @@ class ServiceDecl:
 class DockerManifest:
     """The parsed extension manifest.
 
-    ``project_prefix`` and ``compose_file`` are ``None`` when the config file is
-    absent or the field is missing — callers that require these fields should
-    check and emit a useful error.
+    ``project_prefix``, ``environment_compose_file``, and
+    ``workspace_compose_file`` are ``None`` when the config file is absent or
+    the field is missing — callers that require these fields should check and
+    emit a useful error.
 
     ``services`` holds project-scoped services (``scope = "project"``).
     ``workspace_services`` holds workspace-scoped services (``scope = "workspace"``).
@@ -55,7 +59,8 @@ class DockerManifest:
     """
 
     project_prefix: str | None
-    compose_file: str | None
+    environment_compose_file: str | None
+    workspace_compose_file: str | None
     services: tuple[ServiceDecl, ...] = field(default_factory=tuple)
     workspace_services: tuple[ServiceDecl, ...] = field(default_factory=tuple)
 
@@ -68,6 +73,16 @@ class DockerManifest:
         if env == WORKSPACE_SCOPE:
             return self.workspace_services
         return self.services
+
+    def compose_file_for_scope(self, env: str) -> str | None:
+        """Return the compose file path for *env*'s scope.
+
+        Returns ``workspace_compose_file`` when *env* is the reserved
+        ``"workspace"`` scope; returns ``environment_compose_file`` otherwise.
+        """
+        if env == WORKSPACE_SCOPE:
+            return self.workspace_compose_file
+        return self.environment_compose_file
 
     def all_service_names(self) -> list[str]:
         """Return all service names in declaration order: project services first, then workspace.
@@ -98,24 +113,38 @@ def resolve_config_dir(workspace_root: Path | None = None) -> Path | None:
     return None
 
 
+def _resolve_file_path(raw: str | None, config_dir: Path) -> str | None:
+    """Resolve a config-relative or absolute path to an absolute string.
+
+    Relative paths are anchored to *config_dir* (where ``config.toml`` lives),
+    NOT the process cwd.  Absolute paths pass through unchanged.  Returns
+    ``None`` when *raw* is ``None`` or empty.
+    """
+    if not raw:
+        return None
+    p = Path(raw)
+    return str(p if p.is_absolute() else config_dir / p)
+
+
 def load(config_dir: Path | None = None) -> DockerManifest:
     """Load the extension manifest from *config_dir*.
 
     If *config_dir* is ``None``, ``resolve_config_dir()`` is called to locate
     the directory.  A missing directory or absent ``config.toml`` returns a
-    ``DockerManifest`` with ``None`` prefix/file and empty services (graceful).
+    ``DockerManifest`` with all ``None`` fields and empty services (graceful).
 
-    Raises ``ValueError`` on malformed TOML or unexpected schema types.
+    Raises ``ValueError`` on malformed TOML, unexpected schema types, or when
+    the legacy ``compose_file`` key is present (migration error).
     """
     if config_dir is None:
         config_dir = resolve_config_dir()
 
     if config_dir is None:
-        return DockerManifest(project_prefix=None, compose_file=None)
+        return DockerManifest(project_prefix=None, environment_compose_file=None, workspace_compose_file=None)
 
     config_path = config_dir / _CONFIG_FILE
     if not config_path.exists():
-        return DockerManifest(project_prefix=None, compose_file=None)
+        return DockerManifest(project_prefix=None, environment_compose_file=None, workspace_compose_file=None)
 
     try:
         text = config_path.read_text(encoding="utf-8")
@@ -129,16 +158,28 @@ def load(config_dir: Path | None = None) -> DockerManifest:
 
     project_prefix: str | None = doc.get("project_prefix") or None
 
-    # Resolve compose_file: relative paths are anchored to the config dir (where
+    # Back-compat: reject the legacy single compose_file key with a migration message.
+    if "compose_file" in doc:
+        raise ValueError(
+            f"config.toml at {config_path} uses the legacy 'compose_file' key, "
+            "which is no longer supported. "
+            "Migrate by splitting your compose file into two scope-pure files and "
+            "replacing 'compose_file' with:\n"
+            '  environment_compose_file = "environment-compose.yaml"  '
+            "# per-env services\n"
+            '  workspace_compose_file   = "workspace-compose.yaml"    '
+            "# workspace singletons\n"
+            "Run 'python3 -m docker_orchestrator.scaffold <dest>' to generate "
+            "starter files as a reference."
+        )
+
+    # Resolve compose files: relative paths are anchored to the config dir (where
     # config.toml lives), NOT the process cwd. winter dispatches the provider
     # with cwd at the workspace root, so a raw relative path handed to
     # ``docker compose -f`` would resolve against the workspace root and miss the
     # file. Absolute paths pass through unchanged.
-    compose_file_raw = doc.get("compose_file") or None
-    compose_file: str | None = None
-    if compose_file_raw is not None:
-        compose_path = Path(compose_file_raw)
-        compose_file = str(compose_path if compose_path.is_absolute() else config_dir / compose_path)
+    environment_compose_file = _resolve_file_path(doc.get("environment_compose_file") or None, config_dir)
+    workspace_compose_file = _resolve_file_path(doc.get("workspace_compose_file") or None, config_dir)
 
     raw_services: list[dict] = doc.get("service", [])  # type: ignore[type-arg]
     services: list[ServiceDecl] = []
@@ -162,7 +203,8 @@ def load(config_dir: Path | None = None) -> DockerManifest:
 
     return DockerManifest(
         project_prefix=project_prefix,
-        compose_file=compose_file,
+        environment_compose_file=environment_compose_file,
+        workspace_compose_file=workspace_compose_file,
         services=tuple(services),
         workspace_services=tuple(workspace_services),
     )

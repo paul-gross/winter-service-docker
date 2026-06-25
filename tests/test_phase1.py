@@ -119,7 +119,8 @@ def test_manifest_load_missing_dir() -> None:
     manifest = load_manifest(Path("/tmp/nonexistent-winter-service-docker-config-xyz"))
     assert isinstance(manifest, DockerManifest)
     assert manifest.project_prefix is None
-    assert manifest.compose_file is None
+    assert manifest.environment_compose_file is None
+    assert manifest.workspace_compose_file is None
     assert manifest.services == ()
 
 
@@ -127,20 +128,24 @@ def test_manifest_load_missing_config_toml(config_dir: Path) -> None:
     """Config dir exists but has no config.toml → empty manifest."""
     manifest = load_manifest(config_dir)
     assert manifest.project_prefix is None
-    assert manifest.compose_file is None
+    assert manifest.environment_compose_file is None
+    assert manifest.workspace_compose_file is None
     assert manifest.services == ()
 
 
 def test_manifest_load_minimal(config_dir: Path) -> None:
     """Minimal config.toml with required fields only."""
     (config_dir / "config.toml").write_text(
-        'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n',
+        'project_prefix = "myapp"\n'
+        'environment_compose_file = "compose.yaml"\n'
+        'workspace_compose_file = "workspace-compose.yaml"\n',
         encoding="utf-8",
     )
     manifest = load_manifest(config_dir)
     assert manifest.project_prefix == "myapp"
-    # Relative compose_file is resolved against the config dir, not cwd.
-    assert manifest.compose_file == str(config_dir / "compose.yaml")
+    # Relative paths are resolved against the config dir, not cwd.
+    assert manifest.environment_compose_file == str(config_dir / "compose.yaml")
+    assert manifest.workspace_compose_file == str(config_dir / "workspace-compose.yaml")
     assert manifest.services == ()
 
 
@@ -148,7 +153,8 @@ def test_manifest_load_with_services(config_dir: Path) -> None:
     """config.toml with [[service]] entries."""
     (config_dir / "config.toml").write_text(
         'project_prefix = "proj"\n'
-        'compose_file = "docker/compose.yaml"\n'
+        'environment_compose_file = "docker/environment-compose.yaml"\n'
+        'workspace_compose_file = "docker/workspace-compose.yaml"\n'
         "\n"
         "[[service]]\n"
         'name = "backend"\n'
@@ -159,21 +165,25 @@ def test_manifest_load_with_services(config_dir: Path) -> None:
     )
     manifest = load_manifest(config_dir)
     assert manifest.project_prefix == "proj"
-    # Relative nested path resolves against the config dir.
-    assert manifest.compose_file == str(config_dir / "docker/compose.yaml")
+    # Relative nested paths resolve against the config dir.
+    assert manifest.environment_compose_file == str(config_dir / "docker/environment-compose.yaml")
+    assert manifest.workspace_compose_file == str(config_dir / "docker/workspace-compose.yaml")
     assert len(manifest.services) == 2
     assert manifest.services[0] == ServiceDecl(name="backend")
     assert manifest.services[1] == ServiceDecl(name="frontend")
 
 
 def test_manifest_load_absolute_compose_file_passes_through(config_dir: Path) -> None:
-    """An absolute compose_file is used as-is, never re-anchored to the config dir."""
+    """Absolute compose file paths are used as-is, never re-anchored to the config dir."""
     (config_dir / "config.toml").write_text(
-        'project_prefix = "myapp"\ncompose_file = "/etc/winter/compose.yaml"\n',
+        'project_prefix = "myapp"\n'
+        'environment_compose_file = "/etc/winter/environment-compose.yaml"\n'
+        'workspace_compose_file = "/etc/winter/workspace-compose.yaml"\n',
         encoding="utf-8",
     )
     manifest = load_manifest(config_dir)
-    assert manifest.compose_file == "/etc/winter/compose.yaml"
+    assert manifest.environment_compose_file == "/etc/winter/environment-compose.yaml"
+    assert manifest.workspace_compose_file == "/etc/winter/workspace-compose.yaml"
 
 
 def test_manifest_load_bad_toml(config_dir: Path) -> None:
@@ -200,7 +210,9 @@ def test_cli_describe_no_config(tmp_path: Path, capsys: pytest.CaptureFixture[st
 def test_cli_describe_with_services(config_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
     """describe with configured services emits the service name list."""
     (config_dir / "config.toml").write_text(
-        'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n'
+        'project_prefix = "myapp"\n'
+        'environment_compose_file = "compose.yaml"\n'
+        'workspace_compose_file = "workspace-compose.yaml"\n'
         '[[service]]\nname = "db"\n'
         '[[service]]\nname = "api"\n',
         encoding="utf-8",

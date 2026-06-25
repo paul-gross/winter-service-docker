@@ -46,7 +46,12 @@ def _make_manifest(
     services: list[str] | None = None,
 ) -> DockerManifest:
     svcs = tuple(ServiceDecl(name=s) for s in (services or ["db"]))
-    return DockerManifest(project_prefix=prefix, compose_file=compose_file, services=svcs)
+    return DockerManifest(
+        project_prefix=prefix,
+        environment_compose_file=compose_file,
+        workspace_compose_file=compose_file,
+        services=svcs,
+    )
 
 
 def _ok_result(stdout: str = "", returncode: int = 0) -> subprocess.CompletedProcess:
@@ -386,7 +391,12 @@ def test_cmd_logs_follow_broken_pipe_returns_0(tmp_path: Path) -> None:
 
 
 def test_cmd_logs_missing_prefix_returns_1(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    manifest = DockerManifest(project_prefix=None, compose_file="compose.yaml", services=(ServiceDecl("db"),))
+    manifest = DockerManifest(
+        project_prefix=None,
+        environment_compose_file="compose.yaml",
+        workspace_compose_file="compose.yaml",
+        services=(ServiceDecl("db"),),
+    )
     client = FakeComposeClient()
     sink = StringIO()
 
@@ -397,7 +407,12 @@ def test_cmd_logs_missing_prefix_returns_1(tmp_path: Path, capsys: pytest.Captur
 
 
 def test_cmd_logs_missing_compose_file_returns_1(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    manifest = DockerManifest(project_prefix="myapp", compose_file=None, services=(ServiceDecl("db"),))
+    manifest = DockerManifest(
+        project_prefix="myapp",
+        environment_compose_file=None,
+        workspace_compose_file=None,
+        services=(ServiceDecl("db"),),
+    )
     client = FakeComposeClient()
     sink = StringIO()
 

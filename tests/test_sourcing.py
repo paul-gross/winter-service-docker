@@ -172,7 +172,8 @@ class TestRealShellSourcing:
 def _manifest(workspace_services: list[str]) -> DockerManifest:
     return DockerManifest(
         project_prefix="wws",
-        compose_file="compose.yaml",
+        environment_compose_file="compose.yaml",
+        workspace_compose_file="compose.yaml",
         services=(),
         workspace_services=tuple(ServiceDecl(name=s) for s in workspace_services),
     )

@@ -47,7 +47,12 @@ def _make_manifest(
     services: list[str] | None = None,
 ) -> DockerManifest:
     svcs = tuple(ServiceDecl(name=s) for s in (services or []))
-    return DockerManifest(project_prefix=prefix, compose_file=compose_file, services=svcs)
+    return DockerManifest(
+        project_prefix=prefix,
+        environment_compose_file=compose_file,
+        workspace_compose_file=compose_file,
+        services=svcs,
+    )
 
 
 def _container_ps(
@@ -218,7 +223,7 @@ def test_cmd_down_issues_compose_down(tmp_workspace: Path) -> None:
     assert len(fake.compose_calls) == 1
     call = fake.compose_calls[0]
     assert call.project == "myapp-alpha"
-    assert call.compose_file == "compose.yaml"
+    assert call.compose_file == "compose.yaml"  # environment scope
     assert call.args == ["down"]
 
 
@@ -241,9 +246,11 @@ def test_cmd_down_returns_compose_exit_code_on_failure(tmp_workspace: Path) -> N
 
 
 def test_cmd_down_returns_nonzero_on_missing_manifest(tmp_workspace: Path) -> None:
-    """down returns non-zero when project_prefix or compose_file is None."""
+    """down returns non-zero when project_prefix or compose file is None."""
     fake = FakeComposeClient()
-    manifest = DockerManifest(project_prefix=None, compose_file=None, services=())
+    manifest = DockerManifest(
+        project_prefix=None, environment_compose_file=None, workspace_compose_file=None, services=()
+    )
     rc = cmd_down("alpha", manifest, tmp_workspace, fake)
     assert rc != 0
     assert fake.compose_calls == []
@@ -291,10 +298,10 @@ def test_cmd_up_issues_compose_up_d(tmp_workspace: Path) -> None:
         sleep_fn=clock.sleep,
     )
     assert rc == 0
-    # First call is compose up -d with scoped service names
+    # First call is compose up -d (no per-service-name masking; scope-pure file)
     up_call = fake.compose_calls[0]
     assert up_call.project == "myapp-alpha"
-    assert up_call.args == ["up", "-d", "db"]
+    assert up_call.args == ["up", "-d"]
 
 
 def test_cmd_up_passes_project_name_and_port_vars(tmp_workspace: Path) -> None:
@@ -349,7 +356,9 @@ def test_cmd_up_returns_nonzero_on_compose_up_failure(tmp_workspace: Path) -> No
 def test_cmd_up_returns_nonzero_on_missing_manifest(tmp_workspace: Path) -> None:
     clock = FakeClock()
     fake = FakeComposeClient()
-    manifest = DockerManifest(project_prefix=None, compose_file=None, services=())
+    manifest = DockerManifest(
+        project_prefix=None, environment_compose_file=None, workspace_compose_file=None, services=()
+    )
     rc = cmd_up(
         "alpha",
         manifest,
@@ -698,7 +707,7 @@ def test_cli_up_with_env_dispatches(tmp_path: Path, tmp_workspace: Path, capsys:
     config_dir = tmp_path / "config"
     config_dir.mkdir()
     (config_dir / "config.toml").write_text(
-        'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n[[service]]\nname = "db"\n',
+        'project_prefix = "myapp"\nenvironment_compose_file = "compose.yaml"\nworkspace_compose_file = "workspace-compose.yaml"\n[[service]]\nname = "db"\n',
         encoding="utf-8",
     )
 
@@ -736,7 +745,7 @@ def test_cli_down_with_env_dispatches(tmp_path: Path, tmp_workspace: Path, capsy
     config_dir = tmp_path / "config"
     config_dir.mkdir()
     (config_dir / "config.toml").write_text(
-        'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n[[service]]\nname = "db"\n',
+        'project_prefix = "myapp"\nenvironment_compose_file = "compose.yaml"\nworkspace_compose_file = "workspace-compose.yaml"\n[[service]]\nname = "db"\n',
         encoding="utf-8",
     )
 

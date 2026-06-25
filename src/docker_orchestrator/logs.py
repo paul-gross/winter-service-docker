@@ -275,9 +275,9 @@ def cmd_logs(
     """
     out: IO[str] = sink if sink is not None else sys.stdout
 
-    if not manifest.project_prefix or not manifest.compose_file:
+    if not manifest.project_prefix:
         print(
-            "docker-orchestrator: logs: manifest is missing project_prefix or compose_file",
+            "docker-orchestrator: logs: manifest is missing project_prefix",
             file=sys.stderr,
         )
         return 1
@@ -301,6 +301,14 @@ def cmd_logs(
     worst = 0
 
     for env, svc in targets:
+        compose_file = manifest.compose_file_for_scope(env)
+        if not compose_file:
+            print(
+                f"docker-orchestrator: logs: manifest is missing compose file for scope of {env!r}",
+                file=sys.stderr,
+            )
+            worst = max(worst, 1)
+            continue
         ctx = build_env_context(env, manifest.project_prefix, workspace_root)
         source_env_file = resolve_env_file(workspace_root, env)
         log_args = _build_log_args(
@@ -316,7 +324,7 @@ def cmd_logs(
             try:
                 line_iter, wait_fn = client.compose_stream(
                     ctx.compose_project_name,
-                    manifest.compose_file,
+                    compose_file,
                     log_args,
                     source_env_file=source_env_file,
                 )
@@ -336,7 +344,7 @@ def cmd_logs(
             try:
                 result = client.compose(
                     ctx.compose_project_name,
-                    manifest.compose_file,
+                    compose_file,
                     log_args,
                     capture_output=True,
                     source_env_file=source_env_file,

@@ -175,9 +175,10 @@ def cmd_down(
     Returns the compose exit code.
     Emits a concise diagnostic line to stderr.
     """
-    if not manifest.project_prefix or not manifest.compose_file:
+    compose_file = manifest.compose_file_for_scope(env)
+    if not manifest.project_prefix or not compose_file:
         print(
-            "docker-orchestrator: down: manifest is missing project_prefix or compose_file",
+            "docker-orchestrator: down: manifest is missing project_prefix or compose file for this scope",
             file=sys.stderr,
         )
         return 1
@@ -202,7 +203,7 @@ def cmd_down(
     try:
         result = client.compose(
             ctx.compose_project_name,
-            manifest.compose_file,
+            compose_file,
             ["down"],
             env=compose_env,
             source_env_file=source_env_file,
@@ -257,9 +258,10 @@ def cmd_up(
     _time_fn = time_fn if time_fn is not None else _time.monotonic
     _sleep_fn = sleep_fn if sleep_fn is not None else _time.sleep
 
-    if not manifest.project_prefix or not manifest.compose_file:
+    compose_file = manifest.compose_file_for_scope(env)
+    if not manifest.project_prefix or not compose_file:
         print(
-            "docker-orchestrator: up: manifest is missing project_prefix or compose_file",
+            "docker-orchestrator: up: manifest is missing project_prefix or compose file for this scope",
             file=sys.stderr,
         )
         return 1
@@ -270,8 +272,9 @@ def cmd_up(
     source_env_file = resolve_env_file(workspace_root, env)
 
     # Guard: if no services belong to this scope, skip the compose call entirely.
-    # Calling "compose up -d" with no service-name args would start ALL services
-    # in the compose file, which defeats scope isolation.
+    # Each scope-pure compose file contains only its scope's services, so
+    # an arg-less "up -d" starts exactly the right set.  But when the manifest
+    # declares no services for this scope there is nothing to start.
     if not scoped_services:
         scope_label = "workspace" if ctx.env == "workspace" else ctx.env
         print(
@@ -285,17 +288,14 @@ def cmd_up(
         file=sys.stderr,
     )
 
-    # Step 1: compose up -d <service-names...>
-    # Pass the scoped service names as positional args so compose only starts the
-    # services belonging to this scope.  The single compose.yaml contains services
-    # for ALL scopes; without explicit names "up -d" would start every service,
-    # causing workspace-scoped services to run per-env and vice versa.
-    service_names = [s.name for s in scoped_services]
+    # Step 1: compose up -d
+    # Each scope-pure compose file contains only its scope's services, so no
+    # per-service-name masking is needed — the file itself enforces isolation.
     try:
         result = client.compose(
             ctx.compose_project_name,
-            manifest.compose_file,
-            ["up", "-d", *service_names],
+            compose_file,
+            ["up", "-d"],
             env=compose_env,
             source_env_file=source_env_file,
         )
@@ -321,7 +321,7 @@ def cmd_up(
     while True:
         ready, unready_name = _poll_readiness(
             ctx.compose_project_name,
-            manifest.compose_file,
+            compose_file,
             client,
             compose_env,
             source_env_file=source_env_file,

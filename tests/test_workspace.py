@@ -53,7 +53,8 @@ def _make_manifest(
     ws_svcs = tuple(ServiceDecl(name=s) for s in (workspace_services or []))
     return DockerManifest(
         project_prefix=prefix,
-        compose_file=compose_file,
+        environment_compose_file=compose_file,
+        workspace_compose_file=compose_file,
         services=svcs,
         workspace_services=ws_svcs,
     )

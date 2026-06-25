@@ -16,10 +16,19 @@
 # The workspace scope uses <project_prefix>-workspace.
 project_prefix = "myapp"
 
-# Path to the compose file consumed by this orchestrator.
+# Path to the compose file for per-env (project-scoped) services.
+# Contains ONLY project-scoped services — independently runnable by hand
+# (source the env file in a shell first; see ai/provider-contract.md#env-file-sourcing).
 # Relative paths are resolved relative to this config dir (alongside config.toml).
 # Absolute paths are used as-is.
-compose_file = "compose.yaml"
+environment_compose_file = "environment-compose.yaml"
+
+# Path to the compose file for workspace-scoped singleton services.
+# Contains ONLY workspace-scoped services — independently runnable by hand
+# (source the env file in a shell first; see ai/provider-contract.md#env-file-sourcing).
+# Relative paths are resolved relative to this config dir (alongside config.toml).
+# Absolute paths are used as-is.
+workspace_compose_file = "workspace-compose.yaml"
 
 # ---------------------------------------------------------------------------
 # Services — declare every service winter should manage.
@@ -28,14 +37,16 @@ compose_file = "compose.yaml"
 #   name  (required) — unique identifier used in restart and logs patterns.
 #                      Names are globally unique across both scopes.
 #   scope (optional, default "project") — "project" runs the service in the
-#                      per-env <project_prefix>-<env> compose project;
-#                      "workspace" makes it a workspace-scoped singleton that
-#                      runs in <project_prefix>-workspace (shared across all
-#                      feature envs).  Drive workspace services with
+#                      per-env <project_prefix>-<env> compose project (declared
+#                      in environment_compose_file); "workspace" makes it a
+#                      workspace-scoped singleton that runs in
+#                      <project_prefix>-workspace (declared in
+#                      workspace_compose_file, shared across all feature envs).
+#                      Drive workspace services with
 #                      `winter service up/down workspace`.
 #
 # WSD_PORT_<NAME> port-substitution convention:
-#   Published host ports in compose.yaml should use ${WSD_PORT_<NAME>}
+#   Published host ports in environment-compose.yaml should use ${WSD_PORT_<NAME>}
 #   placeholders where <NAME> is the UPPER-CASED service name.
 #   winter-service-docker substitutes WINTER_PORT_BASE + <position> at runtime,
 #   where <position> is the 0-based declaration order among PROJECT-scoped
@@ -50,7 +61,7 @@ compose_file = "compose.yaml"
 #   beta (4040), and gamma (4060) each get unique host ports automatically.
 #
 #   Workspace-scoped services have no WINTER_PORT_BASE, so no WSD_PORT_* is
-#   emitted for them — use fixed host ports in compose.yaml instead.
+#   emitted for them — use fixed host ports in workspace-compose.yaml instead.
 # ---------------------------------------------------------------------------
 
 [[service]]
@@ -83,6 +94,6 @@ name = "worker"
 
 [[service]]
 # Shared database singleton — runs once in <project_prefix>-workspace.
-# No WSD_PORT_DB is emitted; use a fixed port in compose.yaml.
+# No WSD_PORT_DB is emitted; use a fixed port in workspace-compose.yaml.
 name = "db"
 scope = "workspace"

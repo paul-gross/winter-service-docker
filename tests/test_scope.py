@@ -54,7 +54,8 @@ def _mixed_manifest(
     ws_svcs = tuple(ServiceDecl(name=s) for s in (workspace_services or ["db"]))
     return DockerManifest(
         project_prefix=prefix,
-        compose_file=compose_file,
+        environment_compose_file=compose_file,
+        workspace_compose_file=compose_file,
         services=p_svcs,
         workspace_services=ws_svcs,
     )
@@ -69,7 +70,8 @@ def _project_only_manifest(
     svcs = tuple(ServiceDecl(name=s) for s in (services or ["db", "api"]))
     return DockerManifest(
         project_prefix=prefix,
-        compose_file=compose_file,
+        environment_compose_file=compose_file,
+        workspace_compose_file=compose_file,
         services=svcs,
         workspace_services=(),
     )
@@ -125,7 +127,7 @@ class TestManifestPartition:
     def test_default_scope_lands_in_services(self, config_dir: Path) -> None:
         """A [[service]] with no scope field defaults to project-scoped."""
         (config_dir / "config.toml").write_text(
-            'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n[[service]]\nname = "backend"\n',
+            'project_prefix = "myapp"\nenvironment_compose_file = "compose.yaml"\nworkspace_compose_file = "workspace-compose.yaml"\n[[service]]\nname = "backend"\n',
             encoding="utf-8",
         )
         manifest = load_manifest(config_dir)
@@ -136,7 +138,7 @@ class TestManifestPartition:
     def test_explicit_project_scope_lands_in_services(self, config_dir: Path) -> None:
         """scope = "project" explicitly → lands in services."""
         (config_dir / "config.toml").write_text(
-            'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n'
+            'project_prefix = "myapp"\nenvironment_compose_file = "compose.yaml"\nworkspace_compose_file = "workspace-compose.yaml"\n'
             '[[service]]\nname = "backend"\nscope = "project"\n',
             encoding="utf-8",
         )
@@ -148,7 +150,7 @@ class TestManifestPartition:
     def test_workspace_scope_lands_in_workspace_services(self, config_dir: Path) -> None:
         """scope = "workspace" → lands in workspace_services, not services."""
         (config_dir / "config.toml").write_text(
-            'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n[[service]]\nname = "db"\nscope = "workspace"\n',
+            'project_prefix = "myapp"\nenvironment_compose_file = "compose.yaml"\nworkspace_compose_file = "workspace-compose.yaml"\n[[service]]\nname = "db"\nscope = "workspace"\n',
             encoding="utf-8",
         )
         manifest = load_manifest(config_dir)
@@ -159,7 +161,7 @@ class TestManifestPartition:
     def test_mixed_scope_partition(self, config_dir: Path) -> None:
         """Mixed [[service]] entries partition correctly."""
         (config_dir / "config.toml").write_text(
-            'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n'
+            'project_prefix = "myapp"\nenvironment_compose_file = "compose.yaml"\nworkspace_compose_file = "workspace-compose.yaml"\n'
             '[[service]]\nname = "backend"\n'
             '[[service]]\nname = "db"\nscope = "workspace"\n'
             '[[service]]\nname = "api"\nscope = "project"\n',
@@ -174,7 +176,7 @@ class TestManifestPartition:
     def test_invalid_scope_raises_value_error(self, config_dir: Path) -> None:
         """An unrecognized scope value raises ValueError."""
         (config_dir / "config.toml").write_text(
-            'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n[[service]]\nname = "svc"\nscope = "global"\n',
+            'project_prefix = "myapp"\nenvironment_compose_file = "compose.yaml"\nworkspace_compose_file = "workspace-compose.yaml"\n[[service]]\nname = "svc"\nscope = "global"\n',
             encoding="utf-8",
         )
         with pytest.raises(ValueError, match="invalid scope"):
@@ -183,7 +185,7 @@ class TestManifestPartition:
     def test_duplicate_name_within_project_raises(self, config_dir: Path) -> None:
         """Duplicate name within project scope raises ValueError."""
         (config_dir / "config.toml").write_text(
-            'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n'
+            'project_prefix = "myapp"\nenvironment_compose_file = "compose.yaml"\nworkspace_compose_file = "workspace-compose.yaml"\n'
             '[[service]]\nname = "db"\n'
             '[[service]]\nname = "db"\n',
             encoding="utf-8",
@@ -198,7 +200,7 @@ class TestManifestPartition:
         across both partitions.
         """
         (config_dir / "config.toml").write_text(
-            'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n'
+            'project_prefix = "myapp"\nenvironment_compose_file = "compose.yaml"\nworkspace_compose_file = "workspace-compose.yaml"\n'
             '[[service]]\nname = "db"\n'
             '[[service]]\nname = "db"\nscope = "workspace"\n',
             encoding="utf-8",
@@ -237,24 +239,23 @@ class TestUpDownScopeFiltering:
     """up workspace uses workspace partition; up alpha uses project partition."""
 
     def test_up_alpha_calls_project_partition_only(self, tmp_path: Path) -> None:
-        """CORE PROBE: up alpha passes only project service names to compose up.
+        """CORE PROBE: up alpha uses the environment compose file and the per-env project.
 
         With a mixed manifest (backend=project, db=workspace):
         - compose up is called with project myapp-alpha
-        - up args include "backend" and NOT "db"
+        - compose file is the environment_compose_file (scope-pure: only backend)
+        - up args are ["up", "-d"] (no per-service-name masking; file scope is isolation)
         - WSD_PORT_BACKEND is present in the env
         - WSD_PORT_DB is NOT present in the env
-        This is the PRIMARY acceptance criterion for scope isolation.
-
-        TEETH CHECK: would FAIL against pre-fix code because pre-fix "up -d" had
-        no service-name args, so asserting "backend" in args would fail.
+        This is the PRIMARY acceptance criterion for scope isolation — guaranteed
+        by file layout rather than service-name masking.
         """
         manifest = _mixed_manifest(project_services=["backend"], workspace_services=["db"])
         ws = _alpha_workspace(tmp_path)
         time_fn, sleep_fn = _clock()
         client = FakeComposeClient(
             compose_results=[
-                _ok_result(0),  # compose up -d backend
+                _ok_result(0),  # compose up -d
                 _ps_result([_running_container("backend")]),  # readiness poll
             ]
         )
@@ -265,33 +266,31 @@ class TestUpDownScopeFiltering:
         env = up_call.env or {}
         # Project name targets the per-env project
         assert up_call.project == "myapp-alpha"
-        # Service-name args: backend is included, db is NOT
-        assert "backend" in up_call.args, f"'backend' must appear in up args; got {up_call.args!r}"
-        assert "db" not in up_call.args, (
-            f"'db' (workspace-scoped) must NOT appear in per-env up args; got {up_call.args!r}"
-        )
+        # No per-service-name masking: the scope-pure file enforces isolation
+        assert up_call.args == ["up", "-d"], f"expected ['up', '-d']; got {up_call.args!r}"
+        # The environment compose file is used (not the workspace file)
+        assert up_call.compose_file == manifest.environment_compose_file
         # Project service gets a port var
         assert "WSD_PORT_BACKEND" in env, "expected WSD_PORT_BACKEND for project service"
         # Workspace service does NOT get a port var
         assert "WSD_PORT_DB" not in env, "WSD_PORT_DB must not appear in per-env up"
 
     def test_up_workspace_calls_workspace_partition_only(self, tmp_path: Path) -> None:
-        """CORE PROBE: up workspace passes only workspace service names to compose up.
+        """CORE PROBE: up workspace uses the workspace compose file and the workspace project.
 
         With a mixed manifest (backend=project, db=workspace):
         - compose up is called with project myapp-workspace
-        - up args include "db" and NOT "backend"
+        - compose file is workspace_compose_file (scope-pure: only db)
+        - up args are ["up", "-d"] (no per-service-name masking)
         - NO WSD_PORT_* vars are present (workspace scope has no port base)
-        This is the PRIMARY acceptance criterion for scope isolation.
-
-        TEETH CHECK: would FAIL against pre-fix code because pre-fix "up -d" had
-        no service-name args, so asserting "db" in args would fail.
+        This is the PRIMARY acceptance criterion for scope isolation — guaranteed
+        by file layout rather than service-name masking.
         """
         manifest = _mixed_manifest(project_services=["backend"], workspace_services=["db"])
         time_fn, sleep_fn = _clock()
         client = FakeComposeClient(
             compose_results=[
-                _ok_result(0),  # compose up -d db
+                _ok_result(0),  # compose up -d
                 _ps_result([_running_container("db", project="myapp-workspace")]),  # readiness poll
             ]
         )
@@ -302,21 +301,19 @@ class TestUpDownScopeFiltering:
         env = up_call.env or {}
         # Project name targets the workspace project
         assert up_call.project == "myapp-workspace"
-        # Service-name args: db is included, backend is NOT
-        assert "db" in up_call.args, f"'db' must appear in workspace up args; got {up_call.args!r}"
-        assert "backend" not in up_call.args, (
-            f"'backend' (project-scoped) must NOT appear in workspace up args; got {up_call.args!r}"
-        )
+        # No per-service-name masking: the scope-pure file enforces isolation
+        assert up_call.args == ["up", "-d"], f"expected ['up', '-d']; got {up_call.args!r}"
+        # The workspace compose file is used (not the environment file)
+        assert up_call.compose_file == manifest.workspace_compose_file
         # No WSD_PORT_* at all for workspace scope
         port_keys = [k for k in env if k.startswith("WSD_PORT_")]
         assert port_keys == [], f"unexpected WSD_PORT_* in workspace up: {port_keys}"
 
     def test_workspace_service_excluded_from_per_env_up(self, tmp_path: Path) -> None:
-        """Workspace service 'db' is NOT passed to readiness gate for per-env up.
+        """Workspace-scoped services are in a separate file; per-env up uses environment file only.
 
-        The readiness poll only queries myapp-alpha, which does not include db.
-        If db were included, there would be an extra ps call or db would appear
-        in the up results for myapp-alpha — neither should happen.
+        With two scope-pure files, the environment_compose_file does not contain
+        workspace services.  The readiness poll only queries myapp-alpha.
         """
         manifest = _mixed_manifest(project_services=["backend"], workspace_services=["db"])
         ws = _alpha_workspace(tmp_path)
@@ -329,11 +326,9 @@ class TestUpDownScopeFiltering:
         )
         cmd_up("alpha", manifest, ws, client, time_fn=time_fn, sleep_fn=sleep_fn, timeout=10.0)
 
-        # The up call must NOT include "db" in its service-name args
+        # The up call must use the environment compose file (scope-pure isolation)
         up_call = client.compose_calls[0]
-        assert "db" not in up_call.args, (
-            f"'db' (workspace-scoped) must not appear in per-env up args; got {up_call.args!r}"
-        )
+        assert up_call.compose_file == manifest.environment_compose_file
 
         # Only one compose call (up -d) and one ps poll should be made
         # The ps poll queries myapp-alpha, NOT myapp-workspace
@@ -345,10 +340,9 @@ class TestUpDownScopeFiltering:
             )
 
     def test_project_service_excluded_from_workspace_up(self, tmp_path: Path) -> None:
-        """Project service 'backend' is NOT involved in workspace up.
+        """Project-scoped services are in a separate file; workspace up uses workspace file only.
 
-        The workspace up call targets myapp-workspace; backend is project-scoped
-        and must not appear in the up args or get a WSD_PORT_BACKEND var.
+        The workspace_compose_file does not contain project services.
         """
         manifest = _mixed_manifest(project_services=["backend"], workspace_services=["db"])
         time_fn, sleep_fn = _clock()
@@ -362,11 +356,10 @@ class TestUpDownScopeFiltering:
 
         up_call = client.compose_calls[0]
         env = up_call.env or {}
-        assert "backend" not in up_call.args, (
-            f"'backend' (project-scoped) must NOT appear in workspace up args; got {up_call.args!r}"
-        )
+        # The workspace compose file is used (scope-pure isolation)
+        assert up_call.compose_file == manifest.workspace_compose_file
         assert "WSD_PORT_BACKEND" not in env, (
-            "WSD_PORT_BACKEND must not appear in workspace up — backend is project-scoped and must be excluded"
+            "WSD_PORT_BACKEND must not appear in workspace up — backend is project-scoped"
         )
 
     def test_up_empty_workspace_scope_no_compose_call(self, tmp_path: Path) -> None:
@@ -378,7 +371,8 @@ class TestUpDownScopeFiltering:
         """
         manifest = DockerManifest(
             project_prefix="myapp",
-            compose_file="compose.yaml",
+            environment_compose_file="compose.yaml",
+            workspace_compose_file="compose.yaml",
             services=(ServiceDecl(name="backend"),),
             workspace_services=(),  # no workspace services
         )
@@ -399,7 +393,8 @@ class TestUpDownScopeFiltering:
         """
         manifest = DockerManifest(
             project_prefix="myapp",
-            compose_file="compose.yaml",
+            environment_compose_file="compose.yaml",
+            workspace_compose_file="compose.yaml",
             services=(),  # no project services
             workspace_services=(ServiceDecl(name="db"),),
         )
@@ -448,7 +443,8 @@ class TestPortOffsetScopedList:
         """
         manifest = DockerManifest(
             project_prefix="myapp",
-            compose_file="compose.yaml",
+            environment_compose_file="compose.yaml",
+            workspace_compose_file="compose.yaml",
             services=(ServiceDecl("backend"), ServiceDecl("api")),
             workspace_services=(ServiceDecl("db"),),
         )
@@ -465,7 +461,8 @@ class TestPortOffsetScopedList:
         """Multiple workspace services don't affect project port numbering."""
         manifest = DockerManifest(
             project_prefix="myapp",
-            compose_file="compose.yaml",
+            environment_compose_file="compose.yaml",
+            workspace_compose_file="compose.yaml",
             services=(ServiceDecl("frontend"),),
             workspace_services=(ServiceDecl("db"), ServiceDecl("redis")),
         )
@@ -483,7 +480,8 @@ class TestPortOffsetScopedList:
         """services_for_scope("alpha") returns the project list, not the combined list."""
         manifest = DockerManifest(
             project_prefix="myapp",
-            compose_file="compose.yaml",
+            environment_compose_file="compose.yaml",
+            workspace_compose_file="compose.yaml",
             services=(ServiceDecl("a"), ServiceDecl("b")),
             workspace_services=(ServiceDecl("c"), ServiceDecl("d"), ServiceDecl("e")),
         )
@@ -655,7 +653,7 @@ class TestDescribeBothScopes:
     ) -> None:
         """describe with mixed scope manifest emits names from both partitions."""
         (config_dir / "config.toml").write_text(
-            'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n'
+            'project_prefix = "myapp"\nenvironment_compose_file = "compose.yaml"\nworkspace_compose_file = "workspace-compose.yaml"\n'
             '[[service]]\nname = "backend"\n'
             '[[service]]\nname = "db"\nscope = "workspace"\n',
             encoding="utf-8",
@@ -671,7 +669,7 @@ class TestDescribeBothScopes:
     def test_describe_workspace_only_manifest(self, config_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
         """describe with only workspace-scoped services lists those names."""
         (config_dir / "config.toml").write_text(
-            'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n'
+            'project_prefix = "myapp"\nenvironment_compose_file = "compose.yaml"\nworkspace_compose_file = "workspace-compose.yaml"\n'
             '[[service]]\nname = "db"\nscope = "workspace"\n'
             '[[service]]\nname = "redis"\nscope = "workspace"\n',
             encoding="utf-8",
@@ -686,7 +684,7 @@ class TestDescribeBothScopes:
     def test_describe_order_project_then_workspace(self, config_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
         """describe emits project services first, then workspace services."""
         (config_dir / "config.toml").write_text(
-            'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n'
+            'project_prefix = "myapp"\nenvironment_compose_file = "compose.yaml"\nworkspace_compose_file = "workspace-compose.yaml"\n'
             '[[service]]\nname = "api"\n'
             '[[service]]\nname = "db"\nscope = "workspace"\n',
             encoding="utf-8",
@@ -711,7 +709,7 @@ class TestDefaultScopeBackCompat:
     def test_no_scope_field_all_services_are_project(self, config_dir: Path) -> None:
         """Without any scope= fields, every [[service]] is project-scoped."""
         (config_dir / "config.toml").write_text(
-            'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n'
+            'project_prefix = "myapp"\nenvironment_compose_file = "compose.yaml"\nworkspace_compose_file = "workspace-compose.yaml"\n'
             '[[service]]\nname = "db"\n'
             '[[service]]\nname = "api"\n',
             encoding="utf-8",
@@ -723,7 +721,7 @@ class TestDefaultScopeBackCompat:
     def test_no_scope_field_services_for_scope_alpha(self, config_dir: Path) -> None:
         """services_for_scope("alpha") returns all services when no scope field."""
         (config_dir / "config.toml").write_text(
-            'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n'
+            'project_prefix = "myapp"\nenvironment_compose_file = "compose.yaml"\nworkspace_compose_file = "workspace-compose.yaml"\n'
             '[[service]]\nname = "db"\n'
             '[[service]]\nname = "api"\n',
             encoding="utf-8",
@@ -763,7 +761,8 @@ class TestDefaultScopeBackCompat:
         # (or loading a config.toml with no scope= entries).
         manifest = DockerManifest(
             project_prefix="myapp",
-            compose_file="compose.yaml",
+            environment_compose_file="compose.yaml",
+            workspace_compose_file="compose.yaml",
             services=(ServiceDecl("db"), ServiceDecl("api")),
         )
         assert manifest.workspace_services == ()

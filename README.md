@@ -12,7 +12,7 @@ A [winter](https://github.com/paul-gross/winter) extension that adds docker comp
 - **Genuine readiness gate** — because this provider reports real container health, `winter service up <env> --wait` blocks until all containers are healthy before returning.
 - **Winter service integration** — `winter service up/down/status/restart/logs <env>` drives the full lifecycle. Coexists with `winter-service-tmux` under the multi-provider contract.
 - **Built-in doctor probe** — `winter doctor` checks that the docker daemon is reachable and compose v2 is installed, with actionable remediation on failure.
-- **Starter scaffolder** — `python3 -m docker_orchestrator.scaffold <dest>` generates a starter `compose.yaml` and `config.toml` demonstrating the `${WSD_PORT_*}` convention and named volumes.
+- **Starter scaffolder** — `python3 -m docker_orchestrator.scaffold <dest>` generates starter `environment-compose.yaml`, `workspace-compose.yaml`, and `config.toml` demonstrating the `${WSD_PORT_*}` convention and named volumes.
 - **Injectable seam** — all docker/compose calls go through a `ComposeClient` interface; unit tests use a fake (no real daemon required).
 
 ## 🚀 Installation & Setup
@@ -24,11 +24,15 @@ A [winter](https://github.com/paul-gross/winter) extension that adds docker comp
        <workspace-root>/.winter/config/winter-service-docker/
    ```
 
-2. **Edit `config.toml`** — set `project_prefix`, point `compose_file` at your compose file, and list your `[[service]]` entries.
+   This creates three files: `environment-compose.yaml` (per-env services), `workspace-compose.yaml` (workspace singletons), and `config.toml`.
 
-3. **Edit `compose.yaml`** — configure your images and use `${WSD_PORT_<NAME>}` for published ports.
+2. **Edit `config.toml`** — set `project_prefix`, update `environment_compose_file` and `workspace_compose_file` if needed, and list your `[[service]]` entries.
 
-4. **Register the extension** in workspace `.winter/config.toml`:
+3. **Edit `environment-compose.yaml`** — per-env services; use `${WSD_PORT_<NAME>}` for published ports.
+
+4. **Edit `workspace-compose.yaml`** — workspace singleton services; use fixed ports or reference `${WINTER_PORT_BASE}` from the sourced env file.
+
+5. **Register the extension** in workspace `.winter/config.toml`:
 
    ```toml
    [capabilities]
@@ -42,7 +46,7 @@ A [winter](https://github.com/paul-gross/winter) extension that adds docker comp
 
    The legacy root-level key `service_orchestrator = "winter-service-docker"` is still accepted as a deprecated alias.
 
-5. **Start services:**
+6. **Start services:**
 
    ```bash
    winter service up workspace   # optional: start shared singletons first
@@ -51,9 +55,29 @@ A [winter](https://github.com/paul-gross/winter) extension that adds docker comp
    winter service logs alpha     # stream logs
    ```
 
-Commit `config.toml` and `compose.yaml` to source — they are the project's service config and belong in version control.
+Commit `config.toml`, `environment-compose.yaml`, and `workspace-compose.yaml` to source — they are the project's service config and belong in version control.
 
 See [`index.md`](./index.md) for workspace-runtime rules, the port-substitution convention, and workspace scope. See `ai/provider-contract.md` for the docker-specific wire contract.
+
+## 🔧 Manual parity
+
+Each scope-pure compose file is independently runnable by hand. The orchestrator **sources** the winter env file in a shell before invoking compose (not `--env-file`), so shell arithmetic like `WTS_DB_PORT=$(( WINTER_PORT_BASE + 12 ))` in the env file is evaluated. To reproduce the same behavior:
+
+```bash
+# Per-env services (e.g. alpha env, project_prefix=myapp):
+set -a; . alpha/.winter.env; set +a
+docker compose -p myapp-alpha \
+    -f .winter/config/winter-service-docker/environment-compose.yaml \
+    up -d
+
+# Workspace singleton services:
+set -a; . .winter.workspace.env; set +a
+docker compose -p myapp-workspace \
+    -f .winter/config/winter-service-docker/workspace-compose.yaml \
+    up -d
+```
+
+See `ai/provider-contract.md#env-file-sourcing` for the full sourcing contract (which env file per scope, shell-arithmetic support, and precedence rules). Replace `myapp` with your actual `project_prefix`.
 
 ## License
 

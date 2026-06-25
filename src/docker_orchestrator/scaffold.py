@@ -1,8 +1,9 @@
 """Starter-config scaffolder for winter-service-docker.
 
-Writes two files into a destination directory:
-  - ``compose.yaml``   — a demo compose file using ``${WSD_PORT_*}`` port substitution
-  - ``config.toml``    — a starter extension manifest for ``winter-service-docker``
+Writes three files into a destination directory:
+  - ``environment-compose.yaml`` — per-env services using ``${WSD_PORT_*}`` port substitution
+  - ``workspace-compose.yaml``   — workspace-scoped singleton services
+  - ``config.toml``              — a starter extension manifest for ``winter-service-docker``
 
 Usage::
 
@@ -24,38 +25,55 @@ from pathlib import Path
 # Template strings
 # ---------------------------------------------------------------------------
 
-_COMPOSE_YAML = """\
-# Starter compose.yaml for winter-service-docker.
+_ENVIRONMENT_COMPOSE_YAML = """\
+# Starter environment-compose.yaml for winter-service-docker.
+#
+# This file contains ONLY per-env (project-scoped) services.  It is run by
+# winter under the <project_prefix>-<env> compose project name so each feature
+# environment gets isolated containers, networks, and ports.
 #
 # Port substitution uses ${WSD_PORT_<NAME>} placeholders.  winter-service-docker
-# reads each declared service's port offset from config.toml and resolves these
-# at runtime from the env's WINTER_PORT_BASE so two envs never collide on the
-# same host port.
+# resolves WSD_PORT_<NAME> = WINTER_PORT_BASE + <position> at runtime, where
+# <position> is the 0-based declaration order among [[service]] entries in
+# config.toml (workspace-scoped entries are excluded).  Two envs never collide.
 #
-# IMPORTANT: Workspace-scoped services (scope = "workspace" in config.toml) get
-# NO WSD_PORT_* variable — they run in a single shared compose project and must
-# use a fixed host port (or omit port publishing entirely).
-#
-# Named volumes persist data across `docker compose down` and survive
-# `winter ws destroy` (managed separately; the destroy hook runs compose down
-# but does not remove volumes).
+# You can reproduce what winter does by hand:
+#   docker compose -p myapp-alpha \\
+#       -f environment-compose.yaml \\
+#       --env-file alpha/.winter.env \\
+#       up -d
 
 services:
-  # --- per-env project service ---
   backend:
     image: your-backend-image:latest
     ports:
       - "${WSD_PORT_BACKEND}:8080"
     environment:
       DATABASE_URL: "postgresql://app:app@db:5432/app"
-    depends_on:
-      db:
-        condition: service_healthy
+"""
 
-  # --- workspace-scoped singleton (scope = "workspace" in config.toml) ---
-  # Runs in the shared <project_prefix>-workspace compose project, once for the
-  # whole workspace.  Because workspace scope has no WINTER_PORT_BASE, no
-  # WSD_PORT_DB is emitted — use a fixed host port instead.
+_WORKSPACE_COMPOSE_YAML = """\
+# Starter workspace-compose.yaml for winter-service-docker.
+#
+# This file contains ONLY workspace-scoped singleton services.  It is run by
+# winter under the <project_prefix>-workspace compose project name, once for
+# the whole workspace rather than once per feature env.
+#
+# Workspace-scoped services have no WINTER_PORT_BASE, so no WSD_PORT_* variables
+# are emitted for them.  Use fixed host ports (or omit port publishing) instead,
+# or reference ${WINTER_PORT_BASE} from the sourced .winter.workspace.env.
+#
+# Named volumes declared here persist across `docker compose down` and survive
+# `winter ws destroy` (the destroy hook runs compose down but does not remove
+# volumes).
+#
+# You can reproduce what winter does by hand:
+#   docker compose -p myapp-workspace \\
+#       -f workspace-compose.yaml \\
+#       --env-file .winter.workspace.env \\
+#       up -d
+
+services:
   db:
     image: postgres:16-alpine
     environment:
@@ -93,10 +111,17 @@ _CONFIG_TOML = """\
 # e.g. "myapp" produces "myapp-alpha", "myapp-beta", "myapp-workspace"
 project_prefix = "myapp"
 
-# Path to the compose file consumed by this orchestrator.
+# Path to the compose file for per-env (project-scoped) services.
+# Contains only project-scoped services; independently runnable by hand.
 # Relative paths are resolved relative to this config dir.
 # Absolute paths are used as-is.
-compose_file = "compose.yaml"
+environment_compose_file = "environment-compose.yaml"
+
+# Path to the compose file for workspace-scoped singleton services.
+# Contains only workspace-scoped services; independently runnable by hand.
+# Relative paths are resolved relative to this config dir.
+# Absolute paths are used as-is.
+workspace_compose_file = "workspace-compose.yaml"
 
 # ---------------------------------------------------------------------------
 # Services — declare every service you want winter to manage.
@@ -106,14 +131,15 @@ compose_file = "compose.yaml"
 #                      `winter service logs` patterns.  Names are globally
 #                      unique across both scopes.
 #   scope (optional, default "project") — "project" runs the service in the
-#                      per-env <project_prefix>-<env> compose project;
-#                      "workspace" makes it a workspace-scoped singleton that
-#                      runs in <project_prefix>-workspace (shared across all
-#                      feature envs).  Drive workspace services with
-#                      `winter service up/down workspace`.
+#                      per-env <project_prefix>-<env> compose project (declared
+#                      in environment_compose_file); "workspace" makes it a
+#                      workspace-scoped singleton that runs in
+#                      <project_prefix>-workspace (declared in
+#                      workspace_compose_file, shared across all feature envs).
+#                      Drive workspace services with `winter service up/down workspace`.
 #
 # Port substitution (WSD_PORT_<NAME> convention):
-#   Published host ports in compose.yaml should use ${WSD_PORT_<NAME>}
+#   Published host ports in environment-compose.yaml should use ${WSD_PORT_<NAME>}
 #   placeholders where <NAME> is the upper-cased service name.
 #   winter-service-docker resolves WSD_PORT_<NAME> = WINTER_PORT_BASE + <position>
 #   at runtime, where <position> is the 0-based declaration order among
@@ -132,7 +158,7 @@ name = "backend"
 [[service]]
 # Workspace-scoped singleton: runs once in <project_prefix>-workspace,
 # shared across all feature envs.  No WSD_PORT_DB is emitted — use a
-# fixed host port in compose.yaml instead.
+# fixed host port in workspace-compose.yaml instead.
 name = "db"
 scope = "workspace"
 """
@@ -142,7 +168,8 @@ scope = "workspace"
 # ---------------------------------------------------------------------------
 
 _FILES: dict[str, str] = {
-    "compose.yaml": _COMPOSE_YAML,
+    "environment-compose.yaml": _ENVIRONMENT_COMPOSE_YAML,
+    "workspace-compose.yaml": _WORKSPACE_COMPOSE_YAML,
     "config.toml": _CONFIG_TOML,
 }
 
@@ -213,10 +240,11 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"\nNext steps:\n"
         f"  1. Edit {dest / 'config.toml'} — set project_prefix and list your services.\n"
-        f"  2. Edit {dest / 'compose.yaml'} — configure your images and ports.\n"
-        f"  3. Register: add '[capabilities] service = \"winter-service-docker\"'\n"
+        f"  2. Edit {dest / 'environment-compose.yaml'} — per-env services and ports.\n"
+        f"  3. Edit {dest / 'workspace-compose.yaml'} — workspace singleton services.\n"
+        f"  4. Register: add '[capabilities] service = \"winter-service-docker\"'\n"
         f"     to workspace:/.winter/config.toml.\n"
-        f"  4. Run: winter service up <env>"
+        f"  5. Run: winter service up workspace && winter service up <env>"
     )
     return 0
 

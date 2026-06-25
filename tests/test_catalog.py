@@ -60,7 +60,8 @@ def test_catalog_project_services(
         tmp_config,
         """
 project_prefix = "myapp"
-compose_file = "compose.yaml"
+environment_compose_file = "compose.yaml"
+workspace_compose_file = "workspace-compose.yaml"
 
 [[service]]
 name = "backend"
@@ -87,7 +88,8 @@ def test_catalog_workspace_services(
         tmp_config,
         """
 project_prefix = "myapp"
-compose_file = "compose.yaml"
+environment_compose_file = "compose.yaml"
+workspace_compose_file = "workspace-compose.yaml"
 
 [[service]]
 name = "db"
@@ -111,7 +113,8 @@ def test_catalog_mixed_scopes(
         tmp_config,
         """
 project_prefix = "myapp"
-compose_file = "compose.yaml"
+environment_compose_file = "compose.yaml"
+workspace_compose_file = "workspace-compose.yaml"
 
 [[service]]
 name = "api"
@@ -139,7 +142,8 @@ def test_catalog_respects_winter_ext_config_dir(
         custom_dir,
         """
 project_prefix = "myapp"
-compose_file = "compose.yaml"
+environment_compose_file = "compose.yaml"
+workspace_compose_file = "workspace-compose.yaml"
 
 [[service]]
 name = "cache"

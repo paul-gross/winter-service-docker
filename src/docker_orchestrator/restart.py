@@ -108,9 +108,9 @@ def cmd_restart(
         )
         return 1
 
-    if not manifest.project_prefix or not manifest.compose_file:
+    if not manifest.project_prefix:
         print(
-            "docker-orchestrator: restart: manifest is missing project_prefix or compose_file",
+            "docker-orchestrator: restart: manifest is missing project_prefix",
             file=sys.stderr,
         )
         return 1
@@ -126,6 +126,14 @@ def cmd_restart(
 
     worst = 0
     for env, svc in targets:
+        compose_file = manifest.compose_file_for_scope(env)
+        if not compose_file:
+            print(
+                f"docker-orchestrator: restart: manifest is missing compose file for scope of {env!r}",
+                file=sys.stderr,
+            )
+            worst = max(worst, 1)
+            continue
         ctx = build_env_context(env, manifest.project_prefix, workspace_root)
         print(
             f"docker-orchestrator: restart: restarting {svc!r} in {ctx.compose_project_name}",
@@ -134,7 +142,7 @@ def cmd_restart(
         try:
             result = client.compose(
                 ctx.compose_project_name,
-                manifest.compose_file,
+                compose_file,
                 ["restart", svc],
                 source_env_file=resolve_env_file(workspace_root, env),
             )

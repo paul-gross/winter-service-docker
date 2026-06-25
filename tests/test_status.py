@@ -43,7 +43,12 @@ def _make_manifest(
     prefix: str = "myapp", compose_file: str = "compose.yaml", services: list[str] | None = None
 ) -> DockerManifest:
     svcs = tuple(ServiceDecl(name=s) for s in (services or []))
-    return DockerManifest(project_prefix=prefix, compose_file=compose_file, services=svcs)
+    return DockerManifest(
+        project_prefix=prefix,
+        environment_compose_file=compose_file,
+        workspace_compose_file=compose_file,
+        services=svcs,
+    )
 
 
 def _container(
@@ -534,8 +539,10 @@ def test_cmd_status_pattern_wildcard_service(tmp_workspace: Path, capsys: pytest
 
 
 def test_cmd_status_missing_manifest_fields(tmp_workspace: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """Missing project_prefix or compose_file → env entry with empty services."""
-    manifest = DockerManifest(project_prefix=None, compose_file=None, services=())
+    """Missing project_prefix → env entry with empty services."""
+    manifest = DockerManifest(
+        project_prefix=None, environment_compose_file=None, workspace_compose_file=None, services=()
+    )
     fake = FakeComposeClient()
     rc = cmd_status(patterns=["alpha"], manifest=manifest, workspace_root=tmp_workspace, client=fake)
     assert rc == 0
@@ -601,7 +608,7 @@ def test_cli_status_no_patterns_exits_0(tmp_path: Path, capsys: pytest.CaptureFi
     config_dir = tmp_path / "config"
     config_dir.mkdir()
     (config_dir / "config.toml").write_text(
-        'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n[[service]]\nname = "db"\n',
+        'project_prefix = "myapp"\nenvironment_compose_file = "compose.yaml"\nworkspace_compose_file = "workspace-compose.yaml"\n[[service]]\nname = "db"\n',
         encoding="utf-8",
     )
     with patch.dict(
@@ -624,7 +631,7 @@ def test_cli_status_with_env_pattern(tmp_path: Path, capsys: pytest.CaptureFixtu
     config_dir = tmp_path / "config"
     config_dir.mkdir()
     (config_dir / "config.toml").write_text(
-        'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n[[service]]\nname = "db"\n',
+        'project_prefix = "myapp"\nenvironment_compose_file = "compose.yaml"\nworkspace_compose_file = "workspace-compose.yaml"\n[[service]]\nname = "db"\n',
         encoding="utf-8",
     )
     alpha_dir = tmp_path / "alpha"

@@ -147,9 +147,10 @@ def _status_for_env(
     Returns a dict conforming to the winter env-keyed status document env shape.
     """
     # Require manifest fields
-    if not manifest.project_prefix or not manifest.compose_file:
+    compose_file = manifest.compose_file_for_scope(env)
+    if not manifest.project_prefix or not compose_file:
         print(
-            f"docker-orchestrator: status: manifest is missing project_prefix or compose_file for env '{env}'",
+            f"docker-orchestrator: status: manifest is missing project_prefix or compose file for scope of env '{env}'",
             file=sys.stderr,
         )
         return {
@@ -160,7 +161,6 @@ def _status_for_env(
         }
 
     ctx = build_env_context(env, manifest.project_prefix, workspace_root)
-    compose_file = manifest.compose_file
 
     result = client.compose(
         ctx.compose_project_name,
