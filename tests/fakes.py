@@ -11,11 +11,9 @@ need a real docker daemon.  It records every invocation and returns canned
 from __future__ import annotations
 
 import subprocess
-from collections.abc import Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
-from docker_orchestrator.compose_client import CompletedProcess, ComposeClient, Runner, StreamResult
-
+from docker_orchestrator.compose_client import CompletedProcess, IComposeClient, Runner, StreamResult
 
 # ---------------------------------------------------------------------------
 # FakeRunner
@@ -119,7 +117,7 @@ class FakeStreamRunner:
             lines, code = self._streams.pop(0)
             # Add newlines if missing so callers can rstrip consistently.
             lines_with_nl = [ln if ln.endswith("\n") else ln + "\n" for ln in lines]
-            return iter(lines_with_nl), lambda c=code: c  # noqa: E731
+            return iter(lines_with_nl), lambda c=code: c
         return iter([]), lambda: 0
 
 
@@ -244,7 +242,7 @@ class FakeComposeClient:
         if self._compose_stream_results:
             lines, code = self._compose_stream_results.pop(0)
             lines_with_nl = [ln if ln.endswith("\n") else ln + "\n" for ln in lines]
-            return iter(lines_with_nl), lambda c=code: c  # noqa: E731
+            return iter(lines_with_nl), lambda c=code: c
         return iter([]), lambda: 0
 
     def docker(
@@ -261,8 +259,6 @@ class FakeComposeClient:
         return self._docker_default
 
 
-def _conforms_fake_compose_client(x: FakeComposeClient) -> ComposeClient:
-    """Typecheck-time sentinel: FakeComposeClient is structurally compatible with ComposeClient."""
-    # FakeComposeClient is a structural duck-type; no formal Protocol is defined
-    # yet (that belongs to a later phase when callers depend on the seam).
-    return x  # type: ignore[return-value]
+def _conforms_fake_compose_client(x: FakeComposeClient) -> IComposeClient:
+    """Typecheck-time sentinel: FakeComposeClient satisfies IComposeClient."""
+    return x

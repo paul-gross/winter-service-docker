@@ -125,8 +125,7 @@ class TestManifestPartition:
     def test_default_scope_lands_in_services(self, config_dir: Path) -> None:
         """A [[service]] with no scope field defaults to project-scoped."""
         (config_dir / "config.toml").write_text(
-            'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n'
-            "[[service]]\nname = \"backend\"\n",
+            'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n[[service]]\nname = "backend"\n',
             encoding="utf-8",
         )
         manifest = load_manifest(config_dir)
@@ -138,7 +137,7 @@ class TestManifestPartition:
         """scope = "project" explicitly → lands in services."""
         (config_dir / "config.toml").write_text(
             'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n'
-            "[[service]]\nname = \"backend\"\nscope = \"project\"\n",
+            '[[service]]\nname = "backend"\nscope = "project"\n',
             encoding="utf-8",
         )
         manifest = load_manifest(config_dir)
@@ -149,8 +148,7 @@ class TestManifestPartition:
     def test_workspace_scope_lands_in_workspace_services(self, config_dir: Path) -> None:
         """scope = "workspace" → lands in workspace_services, not services."""
         (config_dir / "config.toml").write_text(
-            'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n'
-            "[[service]]\nname = \"db\"\nscope = \"workspace\"\n",
+            'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n[[service]]\nname = "db"\nscope = "workspace"\n',
             encoding="utf-8",
         )
         manifest = load_manifest(config_dir)
@@ -162,9 +160,9 @@ class TestManifestPartition:
         """Mixed [[service]] entries partition correctly."""
         (config_dir / "config.toml").write_text(
             'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n'
-            "[[service]]\nname = \"backend\"\n"
-            "[[service]]\nname = \"db\"\nscope = \"workspace\"\n"
-            "[[service]]\nname = \"api\"\nscope = \"project\"\n",
+            '[[service]]\nname = "backend"\n'
+            '[[service]]\nname = "db"\nscope = "workspace"\n'
+            '[[service]]\nname = "api"\nscope = "project"\n',
             encoding="utf-8",
         )
         manifest = load_manifest(config_dir)
@@ -176,8 +174,7 @@ class TestManifestPartition:
     def test_invalid_scope_raises_value_error(self, config_dir: Path) -> None:
         """An unrecognized scope value raises ValueError."""
         (config_dir / "config.toml").write_text(
-            'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n'
-            "[[service]]\nname = \"svc\"\nscope = \"global\"\n",
+            'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n[[service]]\nname = "svc"\nscope = "global"\n',
             encoding="utf-8",
         )
         with pytest.raises(ValueError, match="invalid scope"):
@@ -187,8 +184,8 @@ class TestManifestPartition:
         """Duplicate name within project scope raises ValueError."""
         (config_dir / "config.toml").write_text(
             'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n'
-            "[[service]]\nname = \"db\"\n"
-            "[[service]]\nname = \"db\"\n",
+            '[[service]]\nname = "db"\n'
+            '[[service]]\nname = "db"\n',
             encoding="utf-8",
         )
         with pytest.raises(ValueError, match="duplicate name"):
@@ -202,8 +199,8 @@ class TestManifestPartition:
         """
         (config_dir / "config.toml").write_text(
             'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n'
-            "[[service]]\nname = \"db\"\n"
-            "[[service]]\nname = \"db\"\nscope = \"workspace\"\n",
+            '[[service]]\nname = "db"\n'
+            '[[service]]\nname = "db"\nscope = "workspace"\n',
             encoding="utf-8",
         )
         with pytest.raises(ValueError, match="duplicate name"):
@@ -269,9 +266,7 @@ class TestUpDownScopeFiltering:
         # Project name targets the per-env project
         assert up_call.project == "myapp-alpha"
         # Service-name args: backend is included, db is NOT
-        assert "backend" in up_call.args, (
-            f"'backend' must appear in up args; got {up_call.args!r}"
-        )
+        assert "backend" in up_call.args, f"'backend' must appear in up args; got {up_call.args!r}"
         assert "db" not in up_call.args, (
             f"'db' (workspace-scoped) must NOT appear in per-env up args; got {up_call.args!r}"
         )
@@ -308,9 +303,7 @@ class TestUpDownScopeFiltering:
         # Project name targets the workspace project
         assert up_call.project == "myapp-workspace"
         # Service-name args: db is included, backend is NOT
-        assert "db" in up_call.args, (
-            f"'db' must appear in workspace up args; got {up_call.args!r}"
-        )
+        assert "db" in up_call.args, f"'db' must appear in workspace up args; got {up_call.args!r}"
         assert "backend" not in up_call.args, (
             f"'backend' (project-scoped) must NOT appear in workspace up args; got {up_call.args!r}"
         )
@@ -348,8 +341,7 @@ class TestUpDownScopeFiltering:
         assert len(ps_calls) >= 1
         for ps_call in ps_calls:
             assert ps_call.project == "myapp-alpha", (
-                f"ps called on wrong project: {ps_call.project!r} — "
-                "workspace scope must not bleed into per-env up"
+                f"ps called on wrong project: {ps_call.project!r} — workspace scope must not bleed into per-env up"
             )
 
     def test_project_service_excluded_from_workspace_up(self, tmp_path: Path) -> None:
@@ -374,8 +366,7 @@ class TestUpDownScopeFiltering:
             f"'backend' (project-scoped) must NOT appear in workspace up args; got {up_call.args!r}"
         )
         assert "WSD_PORT_BACKEND" not in env, (
-            "WSD_PORT_BACKEND must not appear in workspace up — "
-            "backend is project-scoped and must be excluded"
+            "WSD_PORT_BACKEND must not appear in workspace up — backend is project-scoped and must be excluded"
         )
 
     def test_up_empty_workspace_scope_no_compose_call(self, tmp_path: Path) -> None:
@@ -514,11 +505,7 @@ class TestStatusScopeCorrectness:
         """status alpha queries compose project myapp-alpha (not myapp-workspace)."""
         manifest = _mixed_manifest(project_services=["backend"], workspace_services=["db"])
         ws = _alpha_workspace(tmp_path)
-        client = FakeComposeClient(
-            compose_results=[
-                _ps_result([_running_container("backend")])
-            ]
-        )
+        client = FakeComposeClient(compose_results=[_ps_result([_running_container("backend")])])
         cmd_status(["alpha"], manifest, ws, client)
         call = client.compose_calls[0]
         assert call.project == "myapp-alpha"
@@ -527,39 +514,31 @@ class TestStatusScopeCorrectness:
         """status alpha lists backend (project) but NOT db (workspace)."""
         manifest = _mixed_manifest(project_services=["backend"], workspace_services=["db"])
         ws = _alpha_workspace(tmp_path)
-        client = FakeComposeClient(
-            compose_results=[
-                _ps_result([_running_container("backend")])
-            ]
-        )
+        client = FakeComposeClient(compose_results=[_ps_result([_running_container("backend")])])
         cmd_status(["alpha"], manifest, ws, client)
         doc = json.loads(capsys.readouterr().out)
         svc_names = [s["name"] for s in doc["envs"][0]["services"]]
         assert "backend" in svc_names
         assert "db" not in svc_names, "db is workspace-scoped; must not appear in per-env status"
 
-    def test_status_workspace_shows_only_workspace_services(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_status_workspace_shows_only_workspace_services(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         """status workspace lists db (workspace) but NOT backend (project)."""
         manifest = _mixed_manifest(project_services=["backend"], workspace_services=["db"])
-        client = FakeComposeClient(
-            compose_results=[
-                _ps_result([_running_container("db", project="myapp-workspace")])
-            ]
-        )
+        client = FakeComposeClient(compose_results=[_ps_result([_running_container("db", project="myapp-workspace")])])
         cmd_status(["workspace"], manifest, tmp_path, client)
         doc = json.loads(capsys.readouterr().out)
         svc_names = [s["name"] for s in doc["envs"][0]["services"]]
         assert "db" in svc_names
         assert "backend" not in svc_names, "backend is project-scoped; must not appear in workspace status"
 
-    def test_status_workspace_queries_workspace_project(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_status_workspace_queries_workspace_project(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         """status workspace queries compose project myapp-workspace."""
         manifest = _mixed_manifest(project_services=["backend"], workspace_services=["db"])
-        client = FakeComposeClient(
-            compose_results=[
-                _ps_result([])
-            ]
-        )
+        client = FakeComposeClient(compose_results=[_ps_result([])])
         cmd_status(["workspace"], manifest, tmp_path, client)
         call = client.compose_calls[0]
         assert call.project == "myapp-workspace"
@@ -573,18 +552,14 @@ class TestRestartScopeCorrectness:
         manifest = _mixed_manifest(project_services=["backend"], workspace_services=["db"])
         # backend is not in workspace_services; pattern workspace/backend finds nothing
         targets = _collect_restart_targets(["workspace/backend"], manifest)
-        assert targets == [], (
-            "backend is project-scoped; restarting it under workspace scope must yield no targets"
-        )
+        assert targets == [], "backend is project-scoped; restarting it under workspace scope must yield no targets"
 
     def test_restart_alpha_workspace_service_no_match(self) -> None:
         """restart alpha/db returns 1: db is workspace-scoped, not in alpha."""
         manifest = _mixed_manifest(project_services=["backend"], workspace_services=["db"])
         # db is not in services (project); pattern alpha/db finds nothing
         targets = _collect_restart_targets(["alpha/db"], manifest)
-        assert targets == [], (
-            "db is workspace-scoped; restarting it under alpha scope must yield no targets"
-        )
+        assert targets == [], "db is workspace-scoped; restarting it under alpha scope must yield no targets"
 
     def test_restart_workspace_db_correct_scope_finds_target(self, tmp_path: Path) -> None:
         """restart workspace/db finds db — db is workspace-scoped, pattern is correct."""
@@ -598,7 +573,9 @@ class TestRestartScopeCorrectness:
         targets = _collect_restart_targets(["alpha/backend"], manifest)
         assert targets == [("alpha", "backend")]
 
-    def test_cmd_restart_workspace_project_service_returns_1(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_cmd_restart_workspace_project_service_returns_1(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         """cmd_restart workspace/backend emits diagnostic and returns 1."""
         manifest = _mixed_manifest(project_services=["backend"], workspace_services=["db"])
         client = FakeComposeClient()
@@ -606,7 +583,9 @@ class TestRestartScopeCorrectness:
         assert rc == 1
         assert client.compose_calls == []
 
-    def test_cmd_restart_alpha_workspace_service_returns_1(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_cmd_restart_alpha_workspace_service_returns_1(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         """cmd_restart alpha/db emits diagnostic and returns 1."""
         manifest = _mixed_manifest(project_services=["backend"], workspace_services=["db"])
         client = FakeComposeClient()
@@ -642,7 +621,9 @@ class TestLogsScopeCorrectness:
         targets = _collect_log_targets(["alpha/backend"], manifest)
         assert targets == [("alpha", "backend")]
 
-    def test_cmd_logs_alpha_workspace_service_returns_1(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_cmd_logs_alpha_workspace_service_returns_1(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         """cmd_logs alpha/db: no targets → returns 1 with diagnostic."""
         manifest = _mixed_manifest(project_services=["backend"], workspace_services=["db"])
         client = FakeComposeClient()
@@ -669,12 +650,14 @@ class TestLogsScopeCorrectness:
 class TestDescribeBothScopes:
     """describe emits names from both project and workspace partitions."""
 
-    def test_describe_lists_project_and_workspace_services(self, config_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_describe_lists_project_and_workspace_services(
+        self, config_dir: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         """describe with mixed scope manifest emits names from both partitions."""
         (config_dir / "config.toml").write_text(
             'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n'
-            "[[service]]\nname = \"backend\"\n"
-            "[[service]]\nname = \"db\"\nscope = \"workspace\"\n",
+            '[[service]]\nname = "backend"\n'
+            '[[service]]\nname = "db"\nscope = "workspace"\n',
             encoding="utf-8",
         )
         with patch.dict("os.environ", {"WINTER_EXT_CONFIG_DIR": str(config_dir)}):
@@ -689,8 +672,8 @@ class TestDescribeBothScopes:
         """describe with only workspace-scoped services lists those names."""
         (config_dir / "config.toml").write_text(
             'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n'
-            "[[service]]\nname = \"db\"\nscope = \"workspace\"\n"
-            "[[service]]\nname = \"redis\"\nscope = \"workspace\"\n",
+            '[[service]]\nname = "db"\nscope = "workspace"\n'
+            '[[service]]\nname = "redis"\nscope = "workspace"\n',
             encoding="utf-8",
         )
         with patch.dict("os.environ", {"WINTER_EXT_CONFIG_DIR": str(config_dir)}):
@@ -704,8 +687,8 @@ class TestDescribeBothScopes:
         """describe emits project services first, then workspace services."""
         (config_dir / "config.toml").write_text(
             'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n'
-            "[[service]]\nname = \"api\"\n"
-            "[[service]]\nname = \"db\"\nscope = \"workspace\"\n",
+            '[[service]]\nname = "api"\n'
+            '[[service]]\nname = "db"\nscope = "workspace"\n',
             encoding="utf-8",
         )
         with patch.dict("os.environ", {"WINTER_EXT_CONFIG_DIR": str(config_dir)}):
@@ -729,8 +712,8 @@ class TestDefaultScopeBackCompat:
         """Without any scope= fields, every [[service]] is project-scoped."""
         (config_dir / "config.toml").write_text(
             'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n'
-            "[[service]]\nname = \"db\"\n"
-            "[[service]]\nname = \"api\"\n",
+            '[[service]]\nname = "db"\n'
+            '[[service]]\nname = "api"\n',
             encoding="utf-8",
         )
         manifest = load_manifest(config_dir)
@@ -741,8 +724,8 @@ class TestDefaultScopeBackCompat:
         """services_for_scope("alpha") returns all services when no scope field."""
         (config_dir / "config.toml").write_text(
             'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n'
-            "[[service]]\nname = \"db\"\n"
-            "[[service]]\nname = \"api\"\n",
+            '[[service]]\nname = "db"\n'
+            '[[service]]\nname = "api"\n',
             encoding="utf-8",
         )
         manifest = load_manifest(config_dir)
@@ -792,16 +775,20 @@ class TestDefaultScopeBackCompat:
         svc_names = [t[1] for t in targets]
         assert set(svc_names) == {"db", "api"}
 
-    def test_no_scope_field_status_alpha_shows_all_services(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_no_scope_field_status_alpha_shows_all_services(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         """With no scope, status alpha shows all declared services."""
         manifest = _project_only_manifest(services=["db", "api"])
         ws = _alpha_workspace(tmp_path)
         client = FakeComposeClient(
             compose_results=[
-                _ps_result([
-                    _running_container("db"),
-                    _running_container("api"),
-                ])
+                _ps_result(
+                    [
+                        _running_container("db"),
+                        _running_container("api"),
+                    ]
+                )
             ]
         )
         cmd_status(["alpha"], manifest, ws, client)

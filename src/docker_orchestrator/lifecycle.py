@@ -45,23 +45,20 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
-from docker_orchestrator.compose_client import ComposeClient
+from docker_orchestrator.compose_client import IComposeClient
 from docker_orchestrator.compose_ps import extract_health, parse_compose_ps_output
 from docker_orchestrator.env_context import EnvContext, build_env_context, resolve_env_file
 from docker_orchestrator.manifest import DockerManifest, ServiceDecl
-
 
 # ---------------------------------------------------------------------------
 # Port-substitution helpers
 # ---------------------------------------------------------------------------
 
 
-def _port_env_vars(
-    services: tuple[ServiceDecl, ...], port_base: int
-) -> dict[str, str]:
+def _port_env_vars(services: tuple[ServiceDecl, ...], port_base: int) -> dict[str, str]:
     """Build the ``WSD_PORT_<SVC>`` env vars for the compose invocation.
 
     One entry per service in *services*, keyed by ``WSD_PORT_<UPPERCASE_NAME>``,
@@ -69,10 +66,7 @@ def _port_env_vars(
     tuple so that scope partitioning does not shift per-env port assignments.
     Returns an empty dict when *services* is empty.
     """
-    return {
-        f"WSD_PORT_{svc.name.upper()}": str(port_base + i)
-        for i, svc in enumerate(services)
-    }
+    return {f"WSD_PORT_{svc.name.upper()}": str(port_base + i) for i, svc in enumerate(services)}
 
 
 def _build_compose_env(
@@ -125,7 +119,7 @@ def _is_service_ready(raw_docker_state: str, raw_docker_health: str | None) -> b
 def _poll_readiness(
     project: str,
     compose_file: str,
-    client: ComposeClient,
+    client: IComposeClient,
     compose_env: dict[str, str],
     source_env_file: str | None = None,
 ) -> tuple[bool, str]:
@@ -172,7 +166,7 @@ def cmd_down(
     env: str,
     manifest: DockerManifest,
     workspace_root: Path,
-    client: ComposeClient,
+    client: IComposeClient,
 ) -> int:
     """Implement ``down <env>``.
 
@@ -229,7 +223,7 @@ def cmd_up(
     env: str,
     manifest: DockerManifest,
     workspace_root: Path,
-    client: ComposeClient,
+    client: IComposeClient,
     *,
     timeout: float = 120.0,
     poll_interval: float = 2.0,

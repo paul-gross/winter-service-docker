@@ -48,11 +48,10 @@ import json
 import re
 import subprocess
 import sys
-from io import StringIO
 from pathlib import Path
 from typing import IO
 
-from docker_orchestrator.compose_client import ComposeClient
+from docker_orchestrator.compose_client import IComposeClient
 from docker_orchestrator.env_context import build_env_context, resolve_env_file
 from docker_orchestrator.manifest import DockerManifest
 from docker_orchestrator.patterns import envs_from_patterns, service_matches_any_pattern
@@ -133,7 +132,7 @@ def _emit_ndjson(
     sink: IO[str],
 ) -> None:
     """Emit NDJSON events from a list of raw docker log lines."""
-    for raw in (lines or []):
+    for raw in lines or []:
         ts, msg = _parse_docker_log_line(raw)
         event: dict[str, object] = {"ts": ts, "env": env, "svc": svc, "msg": msg}
         sink.write(json.dumps(event, ensure_ascii=False) + "\n")
@@ -249,7 +248,7 @@ def cmd_logs(
     patterns: list[str],
     manifest: DockerManifest,
     workspace_root: Path,
-    client: ComposeClient,
+    client: IComposeClient,
     *,
     sink: IO[str] | None = None,
     follow: bool = False,

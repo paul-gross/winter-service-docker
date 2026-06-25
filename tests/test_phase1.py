@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 import subprocess
-import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -28,9 +27,9 @@ from docker_orchestrator.env_context import (
     published_port,
     read_port_base,
 )
-from docker_orchestrator.manifest import DockerManifest, ServiceDecl, load as load_manifest
+from docker_orchestrator.manifest import DockerManifest, ServiceDecl
+from docker_orchestrator.manifest import load as load_manifest
 from tests.fakes import FakeComposeClient, FakeRunner
-
 
 # ---------------------------------------------------------------------------
 # 1. COMPOSE_PROJECT_NAME derivation
@@ -202,8 +201,8 @@ def test_cli_describe_with_services(config_dir: Path, capsys: pytest.CaptureFixt
     """describe with configured services emits the service name list."""
     (config_dir / "config.toml").write_text(
         'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n'
-        "[[service]]\nname = \"db\"\n"
-        "[[service]]\nname = \"api\"\n",
+        '[[service]]\nname = "db"\n'
+        '[[service]]\nname = "api"\n',
         encoding="utf-8",
     )
     with patch.dict("os.environ", {"WINTER_EXT_CONFIG_DIR": str(config_dir)}):

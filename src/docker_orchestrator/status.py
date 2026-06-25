@@ -23,7 +23,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from docker_orchestrator.compose_client import ComposeClient
+from docker_orchestrator.compose_client import IComposeClient
 from docker_orchestrator.compose_ps import (
     extract_health,
     map_docker_health,
@@ -64,10 +64,9 @@ def _extract_ports(publishers: object) -> list[int]:
         if not isinstance(pub, dict):
             continue
         port = pub.get("PublishedPort")
-        if isinstance(port, int) and not isinstance(port, bool) and port > 0:
-            if port not in seen:
-                seen.add(port)
-                ports.append(port)
+        if isinstance(port, int) and not isinstance(port, bool) and port > 0 and port not in seen:
+            seen.add(port)
+            ports.append(port)
     return ports
 
 
@@ -140,7 +139,7 @@ def _status_for_env(
     env: str,
     manifest: DockerManifest,
     workspace_root: Path,
-    client: ComposeClient,
+    client: IComposeClient,
     patterns: list[str],
 ) -> dict:  # type: ignore[type-arg]
     """Build the env status entry by querying docker compose ps.
@@ -236,7 +235,7 @@ def cmd_status(
     patterns: list[str],
     manifest: DockerManifest,
     workspace_root: Path,
-    client: ComposeClient,
+    client: IComposeClient,
 ) -> int:
     """Implement the ``status [<pattern>...]`` action.
 
@@ -254,9 +253,7 @@ def cmd_status(
     concrete_set = set(concrete_envs)
 
     # Check whether any pattern has a wildcard env-segment or patterns is empty.
-    needs_enumeration = not patterns or any(
-        has_glob(p.split("/", 1)[0] if "/" in p else p) for p in patterns
-    )
+    needs_enumeration = not patterns or any(has_glob(p.split("/", 1)[0] if "/" in p else p) for p in patterns)
 
     if needs_enumeration:
         enumerated = _enumerate_workspace_envs(workspace_root)
@@ -271,6 +268,7 @@ def cmd_status(
                     # Has patterns but some have wildcard env-segments — check
                     # whether any of those wildcard patterns matches this env.
                     import fnmatch as _fnmatch
+
                     for pat in patterns:
                         env_seg = pat.split("/", 1)[0] if "/" in pat else pat
                         if has_glob(env_seg) and _fnmatch.fnmatchcase(env, env_seg):

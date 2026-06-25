@@ -160,9 +160,7 @@ def scaffold(dest: Path, *, force: bool = False) -> list[Path]:
         existing = [dest / name for name in _FILES if (dest / name).exists()]
         if existing:
             paths = ", ".join(str(p) for p in existing)
-            raise FileExistsError(
-                f"Files already exist (use --force to overwrite): {paths}"
-            )
+            raise FileExistsError(f"Files already exist (use --force to overwrite): {paths}")
 
     written: list[Path] = []
     for name, content in _FILES.items():

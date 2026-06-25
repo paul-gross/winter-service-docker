@@ -21,20 +21,19 @@ import json
 import subprocess
 from io import StringIO
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
 from docker_orchestrator.cli import main as cli_main
 from docker_orchestrator.logs import (
     _build_log_args,
-    _collect_log_targets,
     _parse_docker_log_line,
-    read_log_options,
     cmd_logs,
+    read_log_options,
 )
 from docker_orchestrator.manifest import DockerManifest, ServiceDecl
 from tests.fakes import FakeComposeClient
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -158,6 +157,7 @@ def test_parse_docker_log_line_trims_nanoseconds() -> None:
     assert ts is not None
     # Should not have more than 6 fractional digits
     import re
+
     m = re.search(r"\.(\d+)Z", ts)
     if m:
         assert len(m.group(1)) <= 6
@@ -249,9 +249,9 @@ def test_cmd_logs_multi_service_fan_out(tmp_path: Path) -> None:
     assert "db" in svcs_called
     assert "api" in svcs_called
 
-    lines = [l for l in sink.getvalue().strip().split("\n") if l]
+    lines = [ln for ln in sink.getvalue().strip().split("\n") if ln]
     assert len(lines) == 2
-    svcs_in_output = {json.loads(l)["svc"] for l in lines}
+    svcs_in_output = {json.loads(ln)["svc"] for ln in lines}
     assert svcs_in_output == {"db", "api"}
 
 
@@ -337,9 +337,9 @@ def test_cmd_logs_follow_streams_lines_incrementally(tmp_path: Path) -> None:
     rc = cmd_logs(["alpha/db"], manifest, tmp_path, client, sink=sink, follow=True)
 
     assert rc == 0
-    output_lines = [l for l in sink.getvalue().strip().split("\n") if l]
+    output_lines = [ln for ln in sink.getvalue().strip().split("\n") if ln]
     assert len(output_lines) == 3
-    msgs = [json.loads(l)["msg"] for l in output_lines]
+    msgs = [json.loads(ln)["msg"] for ln in output_lines]
     assert msgs == ["first", "second", "third"]
 
 
@@ -358,11 +358,14 @@ def test_cmd_logs_follow_broken_pipe_returns_0(tmp_path: Path) -> None:
         raise BrokenPipeError
 
     class _BPClient:
-        compose_calls = []
-        docker_calls = []
-        compose_stream_calls = []
+        compose_calls: ClassVar[list] = []
+        docker_calls: ClassVar[list] = []
+        compose_stream_calls: ClassVar[list] = []
 
         def compose(self, *a, **kw):
+            return subprocess.CompletedProcess([], 0, stdout="", stderr="")
+
+        def docker(self, *a, **kw):
             return subprocess.CompletedProcess([], 0, stdout="", stderr="")
 
         def compose_stream(self, project, compose_file, args, *, env=None, source_env_file=None):

@@ -138,9 +138,7 @@ def load(config_dir: Path | None = None) -> DockerManifest:
     compose_file: str | None = None
     if compose_file_raw is not None:
         compose_path = Path(compose_file_raw)
-        compose_file = str(
-            compose_path if compose_path.is_absolute() else config_dir / compose_path
-        )
+        compose_file = str(compose_path if compose_path.is_absolute() else config_dir / compose_path)
 
     raw_services: list[dict] = doc.get("service", [])  # type: ignore[type-arg]
     services: list[ServiceDecl] = []
@@ -152,10 +150,7 @@ def load(config_dir: Path | None = None) -> DockerManifest:
             raise ValueError(f"[[service]] entry #{i} is missing a valid 'name' field")
         scope = raw.get("scope", "project")
         if scope not in _VALID_SCOPES:
-            raise ValueError(
-                f"[[service]] entry '{name}' has invalid scope {scope!r};"
-                f" allowed: 'project', 'workspace'"
-            )
+            raise ValueError(f"[[service]] entry '{name}' has invalid scope {scope!r}; allowed: 'project', 'workspace'")
         if name in seen_names:
             raise ValueError(f"[[service]] entry '{name}' has a duplicate name")
         seen_names.add(name)

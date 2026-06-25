@@ -17,7 +17,6 @@ Covers:
 from __future__ import annotations
 
 import subprocess
-from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
@@ -27,7 +26,6 @@ from docker_orchestrator.cli import main as cli_main
 from docker_orchestrator.manifest import DockerManifest, ServiceDecl
 from docker_orchestrator.restart import _collect_restart_targets, cmd_restart
 from tests.fakes import FakeComposeClient
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -230,9 +228,7 @@ def test_cmd_restart_empty_patterns_returns_1(tmp_path: Path, capsys: pytest.Cap
 # ---------------------------------------------------------------------------
 
 
-def test_cli_restart_dispatches_correctly(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_cli_restart_dispatches_correctly(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     """CLI restart alpha/db issues compose restart db with project myapp-alpha."""
     manifest = _make_manifest(services=["db"])
     fake_client = FakeComposeClient(compose_default=_ok_result(0))
@@ -240,7 +236,6 @@ def test_cli_restart_dispatches_correctly(
     with (
         patch.dict("os.environ", {"WINTER_WORKSPACE_DIR": str(tmp_path)}),
         patch("docker_orchestrator.cli.load_manifest", return_value=manifest),
-        patch("docker_orchestrator.restart.ComposeClient", return_value=fake_client),
         patch("docker_orchestrator.compose_client.ComposeClient", return_value=fake_client),
     ):
         # Patch the actual cmd_restart to use our fake_client

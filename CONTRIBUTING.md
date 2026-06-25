@@ -50,7 +50,7 @@ Expected output in this environment: both probes will report `fail` (docker daem
 
 ## Testing changed orchestrator code against a worktree
 
-The installed extension (`.winter/ext/service-docker/`) runs committed code. The PRIMARY door for exercising in-progress changes is the `--service-orchestrator` root flag, which sets `WINTER_EXT_DIR`/`WINTER_EXT_PREFIX` for you:
+The installed extension (`winter-service-docker:/`) runs committed code. The PRIMARY door for exercising in-progress changes is the `--service-orchestrator` root flag, which sets `WINTER_EXT_DIR`/`WINTER_EXT_PREFIX` for you:
 
 ```bash
 winter --service-orchestrator=/path/to/gamma/winter-service-docker service describe

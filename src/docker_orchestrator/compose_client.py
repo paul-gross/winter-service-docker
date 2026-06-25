@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import subprocess
 from collections.abc import Callable, Iterator
-from typing import Any
+from typing import Any, Protocol
 
 # Type alias matching subprocess.run's return type.
 CompletedProcess = subprocess.CompletedProcess[str]
@@ -67,14 +67,52 @@ def _default_stream_runner(args: list[str], **kwargs: Any) -> StreamResult:
 
     def _lines() -> Iterator[str]:
         assert proc.stdout is not None
-        for line in proc.stdout:
-            yield line
+        yield from proc.stdout
 
     def _wait() -> int:
         proc.wait()
         return proc.returncode
 
     return _lines(), _wait
+
+
+class IComposeClient(Protocol):
+    """Protocol seam for all docker/compose subprocess calls.
+
+    Production code depends on this Protocol; both ``ComposeClient`` and
+    ``tests.fakes.FakeComposeClient`` satisfy it structurally.
+    """
+
+    def compose(
+        self,
+        project: str,
+        compose_file: str,
+        args: list[str],
+        *,
+        capture_output: bool = False,
+        check: bool = False,
+        env: dict[str, str] | None = None,
+        source_env_file: str | None = None,
+    ) -> CompletedProcess: ...
+
+    def docker(
+        self,
+        args: list[str],
+        *,
+        capture_output: bool = False,
+        check: bool = False,
+        env: dict[str, str] | None = None,
+    ) -> CompletedProcess: ...
+
+    def compose_stream(
+        self,
+        project: str,
+        compose_file: str,
+        args: list[str],
+        *,
+        env: dict[str, str] | None = None,
+        source_env_file: str | None = None,
+    ) -> StreamResult: ...
 
 
 class ComposeClient:
@@ -186,3 +224,8 @@ class ComposeClient:
         cmd = ["docker", "compose", "-p", project, "-f", compose_file, *args]
         cmd = _wrap_for_source(cmd, source_env_file)
         return self._stream(cmd, env=env)
+
+
+def _conforms_compose_client(x: ComposeClient) -> IComposeClient:
+    """Typecheck-time sentinel: ComposeClient satisfies IComposeClient."""
+    return x

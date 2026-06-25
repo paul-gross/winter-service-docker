@@ -36,7 +36,6 @@ from docker_orchestrator.lifecycle import (
 from docker_orchestrator.manifest import DockerManifest, ServiceDecl
 from tests.fakes import FakeComposeClient
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -252,6 +251,7 @@ def test_cmd_down_returns_nonzero_on_missing_manifest(tmp_workspace: Path) -> No
 
 def test_cmd_down_compose_exception_returns_nonzero(tmp_workspace: Path) -> None:
     """down catches subprocess-level errors and returns non-zero (not exit 2)."""
+
     def exploding_compose(*args, **kwargs):
         raise OSError("docker not found")
 
@@ -273,15 +273,22 @@ def test_cmd_up_issues_compose_up_d(tmp_workspace: Path) -> None:
     clock = FakeClock(start=0.0, advance_per_call=0.0)
     # up -d result, then ps result (healthy, no healthcheck)
     ps_containers = [_container_ps("db", "running", health_status=None)]
-    fake = FakeComposeClient(compose_results=[
-        _ok_result(0),           # compose up -d db
-        _ps_result(ps_containers),  # compose ps
-    ])
+    fake = FakeComposeClient(
+        compose_results=[
+            _ok_result(0),  # compose up -d db
+            _ps_result(ps_containers),  # compose ps
+        ]
+    )
     manifest = _make_manifest(prefix="myapp", services=["db"])
     rc = cmd_up(
-        "alpha", manifest, tmp_workspace, fake,
-        timeout=10.0, poll_interval=0.0,
-        time_fn=clock.time, sleep_fn=clock.sleep,
+        "alpha",
+        manifest,
+        tmp_workspace,
+        fake,
+        timeout=10.0,
+        poll_interval=0.0,
+        time_fn=clock.time,
+        sleep_fn=clock.sleep,
     )
     assert rc == 0
     # First call is compose up -d with scoped service names
@@ -294,20 +301,27 @@ def test_cmd_up_passes_project_name_and_port_vars(tmp_workspace: Path) -> None:
     """up injects COMPOSE_PROJECT_NAME and WSD_PORT_* into the compose env."""
     clock = FakeClock()
     ps_containers = [_container_ps("db", "running")]
-    fake = FakeComposeClient(compose_results=[
-        _ok_result(0),
-        _ps_result(ps_containers),
-    ])
+    fake = FakeComposeClient(
+        compose_results=[
+            _ok_result(0),
+            _ps_result(ps_containers),
+        ]
+    )
     manifest = _make_manifest(prefix="myapp", services=["db", "api"])
     cmd_up(
-        "alpha", manifest, tmp_workspace, fake,
-        timeout=10.0, poll_interval=0.0,
-        time_fn=clock.time, sleep_fn=clock.sleep,
+        "alpha",
+        manifest,
+        tmp_workspace,
+        fake,
+        timeout=10.0,
+        poll_interval=0.0,
+        time_fn=clock.time,
+        sleep_fn=clock.sleep,
     )
     up_call = fake.compose_calls[0]
     assert up_call.env is not None
     assert up_call.env["COMPOSE_PROJECT_NAME"] == "myapp-alpha"
-    assert up_call.env["WSD_PORT_DB"] == "4020"   # port_base=4020 from fixture
+    assert up_call.env["WSD_PORT_DB"] == "4020"  # port_base=4020 from fixture
     assert up_call.env["WSD_PORT_API"] == "4021"
 
 
@@ -317,9 +331,14 @@ def test_cmd_up_returns_nonzero_on_compose_up_failure(tmp_workspace: Path) -> No
     fake = FakeComposeClient(compose_results=[_ok_result(1)])
     manifest = _make_manifest(services=["db"])
     rc = cmd_up(
-        "alpha", manifest, tmp_workspace, fake,
-        timeout=10.0, poll_interval=0.0,
-        time_fn=clock.time, sleep_fn=clock.sleep,
+        "alpha",
+        manifest,
+        tmp_workspace,
+        fake,
+        timeout=10.0,
+        poll_interval=0.0,
+        time_fn=clock.time,
+        sleep_fn=clock.sleep,
     )
     assert rc == 1
     # No ps call should happen after a failed up -d
@@ -332,9 +351,14 @@ def test_cmd_up_returns_nonzero_on_missing_manifest(tmp_workspace: Path) -> None
     fake = FakeComposeClient()
     manifest = DockerManifest(project_prefix=None, compose_file=None, services=())
     rc = cmd_up(
-        "alpha", manifest, tmp_workspace, fake,
-        timeout=10.0, poll_interval=0.0,
-        time_fn=clock.time, sleep_fn=clock.sleep,
+        "alpha",
+        manifest,
+        tmp_workspace,
+        fake,
+        timeout=10.0,
+        poll_interval=0.0,
+        time_fn=clock.time,
+        sleep_fn=clock.sleep,
     )
     assert rc != 0
     assert fake.compose_calls == []
@@ -351,9 +375,14 @@ def test_cmd_up_compose_exception_returns_nonzero(tmp_workspace: Path) -> None:
     fake.compose = exploding_compose  # type: ignore[method-assign]
     manifest = _make_manifest(services=["db"])
     rc = cmd_up(
-        "alpha", manifest, tmp_workspace, fake,
-        timeout=10.0, poll_interval=0.0,
-        time_fn=clock.time, sleep_fn=clock.sleep,
+        "alpha",
+        manifest,
+        tmp_workspace,
+        fake,
+        timeout=10.0,
+        poll_interval=0.0,
+        time_fn=clock.time,
+        sleep_fn=clock.sleep,
     )
     assert rc != 0
     assert rc != 2
@@ -368,15 +397,22 @@ def test_readiness_gate_returns_0_when_all_healthy_immediately(tmp_workspace: Pa
     """Gate passes when the first ps poll reports all containers healthy."""
     clock = FakeClock(start=0.0, advance_per_call=1.0)
     ps_containers = [_container_ps("db", "running", "healthy")]
-    fake = FakeComposeClient(compose_results=[
-        _ok_result(0),           # up -d
-        _ps_result(ps_containers),  # first ps poll
-    ])
+    fake = FakeComposeClient(
+        compose_results=[
+            _ok_result(0),  # up -d
+            _ps_result(ps_containers),  # first ps poll
+        ]
+    )
     manifest = _make_manifest(services=["db"])
     rc = cmd_up(
-        "alpha", manifest, tmp_workspace, fake,
-        timeout=30.0, poll_interval=0.0,
-        time_fn=clock.time, sleep_fn=clock.sleep,
+        "alpha",
+        manifest,
+        tmp_workspace,
+        fake,
+        timeout=30.0,
+        poll_interval=0.0,
+        time_fn=clock.time,
+        sleep_fn=clock.sleep,
     )
     assert rc == 0
 
@@ -386,17 +422,24 @@ def test_readiness_gate_returns_0_after_multiple_polls(tmp_workspace: Path) -> N
     clock = FakeClock(start=0.0, advance_per_call=1.0)
     starting_ct = _container_ps("db", "running", "starting")
     healthy_ct = _container_ps("db", "running", "healthy")
-    fake = FakeComposeClient(compose_results=[
-        _ok_result(0),                # up -d
-        _ps_result([starting_ct]),    # poll 1: starting
-        _ps_result([starting_ct]),    # poll 2: still starting
-        _ps_result([healthy_ct]),     # poll 3: healthy
-    ])
+    fake = FakeComposeClient(
+        compose_results=[
+            _ok_result(0),  # up -d
+            _ps_result([starting_ct]),  # poll 1: starting
+            _ps_result([starting_ct]),  # poll 2: still starting
+            _ps_result([healthy_ct]),  # poll 3: healthy
+        ]
+    )
     manifest = _make_manifest(services=["db"])
     rc = cmd_up(
-        "alpha", manifest, tmp_workspace, fake,
-        timeout=60.0, poll_interval=0.0,
-        time_fn=clock.time, sleep_fn=clock.sleep,
+        "alpha",
+        manifest,
+        tmp_workspace,
+        fake,
+        timeout=60.0,
+        poll_interval=0.0,
+        time_fn=clock.time,
+        sleep_fn=clock.sleep,
     )
     assert rc == 0
     # Three ps calls (polls 1, 2, 3)
@@ -412,34 +455,50 @@ def test_readiness_gate_timeout_returns_nonzero(tmp_workspace: Path) -> None:
     # third time() call (remaining check after 3rd poll) = 12 → timeout
     clock = FakeClock(start=0.0, advance_per_call=6.0)
     unhealthy_ct = _container_ps("db", "running", "unhealthy")
-    fake = FakeComposeClient(compose_results=[
-        _ok_result(0),               # up -d
-        _ps_result([unhealthy_ct]),  # poll 1
-        _ps_result([unhealthy_ct]),  # poll 2
-        _ps_result([unhealthy_ct]),  # poll 3 (never reached)
-    ])
+    fake = FakeComposeClient(
+        compose_results=[
+            _ok_result(0),  # up -d
+            _ps_result([unhealthy_ct]),  # poll 1
+            _ps_result([unhealthy_ct]),  # poll 2
+            _ps_result([unhealthy_ct]),  # poll 3 (never reached)
+        ]
+    )
     manifest = _make_manifest(services=["db"])
     rc = cmd_up(
-        "alpha", manifest, tmp_workspace, fake,
-        timeout=10.0, poll_interval=0.0,
-        time_fn=clock.time, sleep_fn=clock.sleep,
+        "alpha",
+        manifest,
+        tmp_workspace,
+        fake,
+        timeout=10.0,
+        poll_interval=0.0,
+        time_fn=clock.time,
+        sleep_fn=clock.sleep,
     )
     assert rc != 0
 
 
-def test_readiness_gate_timeout_emits_actionable_message(tmp_workspace: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_readiness_gate_timeout_emits_actionable_message(
+    tmp_workspace: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """On timeout, stderr names the unready container."""
     clock = FakeClock(start=0.0, advance_per_call=20.0)
     unhealthy_ct = _container_ps("svc", "running", "unhealthy", name="myapp-alpha-svc-1")
-    fake = FakeComposeClient(compose_results=[
-        _ok_result(0),
-        _ps_result([unhealthy_ct]),
-    ])
+    fake = FakeComposeClient(
+        compose_results=[
+            _ok_result(0),
+            _ps_result([unhealthy_ct]),
+        ]
+    )
     manifest = _make_manifest(services=["svc"])
     cmd_up(
-        "alpha", manifest, tmp_workspace, fake,
-        timeout=10.0, poll_interval=0.0,
-        time_fn=clock.time, sleep_fn=clock.sleep,
+        "alpha",
+        manifest,
+        tmp_workspace,
+        fake,
+        timeout=10.0,
+        poll_interval=0.0,
+        time_fn=clock.time,
+        sleep_fn=clock.sleep,
     )
     captured = capsys.readouterr()
     assert "myapp-alpha-svc-1" in captured.err
@@ -455,15 +514,22 @@ def test_readiness_gate_running_no_healthcheck_is_ready(tmp_workspace: Path) -> 
     """running container without a healthcheck is immediately ready."""
     clock = FakeClock(start=0.0, advance_per_call=1.0)
     ct = _container_ps("db", "running", health_status=None)
-    fake = FakeComposeClient(compose_results=[
-        _ok_result(0),
-        _ps_result([ct]),
-    ])
+    fake = FakeComposeClient(
+        compose_results=[
+            _ok_result(0),
+            _ps_result([ct]),
+        ]
+    )
     manifest = _make_manifest(services=["db"])
     rc = cmd_up(
-        "alpha", manifest, tmp_workspace, fake,
-        timeout=10.0, poll_interval=0.0,
-        time_fn=clock.time, sleep_fn=clock.sleep,
+        "alpha",
+        manifest,
+        tmp_workspace,
+        fake,
+        timeout=10.0,
+        poll_interval=0.0,
+        time_fn=clock.time,
+        sleep_fn=clock.sleep,
     )
     assert rc == 0
 
@@ -473,15 +539,22 @@ def test_readiness_gate_mixed_health_and_no_healthcheck(tmp_workspace: Path) -> 
     clock = FakeClock(start=0.0, advance_per_call=1.0)
     ct1 = _container_ps("db", "running", "healthy")
     ct2 = _container_ps("api", "running", health_status=None)
-    fake = FakeComposeClient(compose_results=[
-        _ok_result(0),
-        _ps_result([ct1, ct2]),
-    ])
+    fake = FakeComposeClient(
+        compose_results=[
+            _ok_result(0),
+            _ps_result([ct1, ct2]),
+        ]
+    )
     manifest = _make_manifest(services=["db", "api"])
     rc = cmd_up(
-        "alpha", manifest, tmp_workspace, fake,
-        timeout=10.0, poll_interval=0.0,
-        time_fn=clock.time, sleep_fn=clock.sleep,
+        "alpha",
+        manifest,
+        tmp_workspace,
+        fake,
+        timeout=10.0,
+        poll_interval=0.0,
+        time_fn=clock.time,
+        sleep_fn=clock.sleep,
     )
     assert rc == 0
 
@@ -496,18 +569,25 @@ def test_readiness_gate_uses_injected_sleep(tmp_workspace: Path) -> None:
     clock = FakeClock(start=0.0, advance_per_call=1.0)
     starting_ct = _container_ps("db", "running", "starting")
     healthy_ct = _container_ps("db", "running", "healthy")
-    fake = FakeComposeClient(compose_results=[
-        _ok_result(0),
-        _ps_result([starting_ct]),
-        _ps_result([healthy_ct]),
-    ])
+    fake = FakeComposeClient(
+        compose_results=[
+            _ok_result(0),
+            _ps_result([starting_ct]),
+            _ps_result([healthy_ct]),
+        ]
+    )
     manifest = _make_manifest(services=["db"])
 
     wall_start = time.monotonic()
     cmd_up(
-        "alpha", manifest, tmp_workspace, fake,
-        timeout=30.0, poll_interval=2.0,
-        time_fn=clock.time, sleep_fn=clock.sleep,
+        "alpha",
+        manifest,
+        tmp_workspace,
+        fake,
+        timeout=30.0,
+        poll_interval=2.0,
+        time_fn=clock.time,
+        sleep_fn=clock.sleep,
     )
     wall_elapsed = time.monotonic() - wall_start
 
@@ -524,7 +604,6 @@ def test_readiness_gate_sleep_bounded_by_remaining(tmp_workspace: Path) -> None:
     starting_ct = _container_ps("db", "running", "starting")
 
     call_count = [0]
-    original_sleep = clock.sleep
 
     def advance_on_sleep(n: float) -> None:
         call_count[0] += 1
@@ -532,18 +611,23 @@ def test_readiness_gate_sleep_bounded_by_remaining(tmp_workspace: Path) -> None:
         if call_count[0] >= 1:
             clock._advance = 10.0  # next time() will be past deadline
 
-    clock.sleep = advance_on_sleep  # type: ignore[method-assign]
-
-    fake = FakeComposeClient(compose_results=[
-        _ok_result(0),
-        _ps_result([starting_ct]),
-        _ps_result([starting_ct]),
-    ])
+    fake = FakeComposeClient(
+        compose_results=[
+            _ok_result(0),
+            _ps_result([starting_ct]),
+            _ps_result([starting_ct]),
+        ]
+    )
     manifest = _make_manifest(services=["db"])
     rc = cmd_up(
-        "alpha", manifest, tmp_workspace, fake,
-        timeout=5.0, poll_interval=100.0,
-        time_fn=clock.time, sleep_fn=clock.sleep,  # type: ignore[arg-type]
+        "alpha",
+        manifest,
+        tmp_workspace,
+        fake,
+        timeout=5.0,
+        poll_interval=100.0,
+        time_fn=clock.time,
+        sleep_fn=advance_on_sleep,
     )
     assert rc != 0  # timed out
 
@@ -571,7 +655,7 @@ def test_poll_readiness_returns_not_ready_when_starting() -> None:
 
 def test_poll_readiness_empty_ps_output_not_ready() -> None:
     fake = FakeComposeClient(compose_results=[_ps_result([])])
-    ready, name = _poll_readiness("myapp-alpha", "compose.yaml", fake, {})
+    ready, _name = _poll_readiness("myapp-alpha", "compose.yaml", fake, {})
     assert ready is False
 
 
@@ -609,9 +693,7 @@ def test_cli_down_no_env_arg_returns_non_zero(capsys: pytest.CaptureFixture[str]
 # ---------------------------------------------------------------------------
 
 
-def test_cli_up_with_env_dispatches(
-    tmp_path: Path, tmp_workspace: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_cli_up_with_env_dispatches(tmp_path: Path, tmp_workspace: Path, capsys: pytest.CaptureFixture[str]) -> None:
     """CLI ``up alpha`` dispatches through lifecycle and returns 0 on success."""
     config_dir = tmp_path / "config"
     config_dir.mkdir()
@@ -634,19 +716,22 @@ def test_cli_up_with_env_dispatches(
                 return self._results.pop(0)
             return _ok_result(0)
 
-    with patch.dict("os.environ", {
-        "WINTER_EXT_CONFIG_DIR": str(config_dir),
-        "WINTER_WORKSPACE_DIR": str(tmp_workspace),
-    }):
-        with patch.object(cc_mod, "ComposeClient", PatchedClient):
-            rc = cli_main(["up", "alpha"])
+    with (
+        patch.dict(
+            "os.environ",
+            {
+                "WINTER_EXT_CONFIG_DIR": str(config_dir),
+                "WINTER_WORKSPACE_DIR": str(tmp_workspace),
+            },
+        ),
+        patch.object(cc_mod, "ComposeClient", PatchedClient),
+    ):
+        rc = cli_main(["up", "alpha"])
 
     assert rc == 0
 
 
-def test_cli_down_with_env_dispatches(
-    tmp_path: Path, tmp_workspace: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_cli_down_with_env_dispatches(tmp_path: Path, tmp_workspace: Path, capsys: pytest.CaptureFixture[str]) -> None:
     """CLI ``down alpha`` dispatches through lifecycle and returns 0 on success."""
     config_dir = tmp_path / "config"
     config_dir.mkdir()
@@ -661,11 +746,16 @@ def test_cli_down_with_env_dispatches(
         def compose(self, *args, **kwargs):
             return _ok_result(0)
 
-    with patch.dict("os.environ", {
-        "WINTER_EXT_CONFIG_DIR": str(config_dir),
-        "WINTER_WORKSPACE_DIR": str(tmp_workspace),
-    }):
-        with patch.object(cc_mod, "ComposeClient", PatchedClient):
-            rc = cli_main(["down", "alpha"])
+    with (
+        patch.dict(
+            "os.environ",
+            {
+                "WINTER_EXT_CONFIG_DIR": str(config_dir),
+                "WINTER_WORKSPACE_DIR": str(tmp_workspace),
+            },
+        ),
+        patch.object(cc_mod, "ComposeClient", PatchedClient),
+    ):
+        rc = cli_main(["down", "alpha"])
 
     assert rc == 0

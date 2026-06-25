@@ -38,7 +38,7 @@ def _parse_env_file(text: str) -> dict[str, str]:
         if not line or line.startswith("#"):
             continue
         if line.startswith("export "):
-            line = line[len("export "):].lstrip()
+            line = line[len("export ") :].lstrip()
         if "=" not in line:
             continue
         key, _, value = line.partition("=")

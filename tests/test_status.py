@@ -22,10 +22,8 @@ from unittest.mock import patch
 import pytest
 
 from docker_orchestrator.cli import main as cli_main
-from docker_orchestrator.compose_client import ComposeClient
 from docker_orchestrator.manifest import DockerManifest, ServiceDecl
 from docker_orchestrator.status import (
-    _build_service_entry,
     _envs_from_patterns,
     _extract_ports,
     _map_docker_health,
@@ -36,12 +34,14 @@ from docker_orchestrator.status import (
 )
 from tests.fakes import FakeComposeClient
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_manifest(prefix: str = "myapp", compose_file: str = "compose.yaml", services: list[str] | None = None) -> DockerManifest:
+
+def _make_manifest(
+    prefix: str = "myapp", compose_file: str = "compose.yaml", services: list[str] | None = None
+) -> DockerManifest:
     svcs = tuple(ServiceDecl(name=s) for s in (services or []))
     return DockerManifest(project_prefix=prefix, compose_file=compose_file, services=svcs)
 
@@ -79,10 +79,7 @@ def _ps_json_array(containers: list[dict]) -> str:
 
 def _fake_client_ps(containers: list[dict], encoding: str = "lines") -> FakeComposeClient:
     """Build a FakeComposeClient that returns canned ps output."""
-    if encoding == "array":
-        stdout = _ps_json_array(containers)
-    else:
-        stdout = _ps_json_lines(containers)
+    stdout = _ps_json_array(containers) if encoding == "array" else _ps_json_lines(containers)
     result = subprocess.CompletedProcess([], 0, stdout=stdout, stderr="")
     return FakeComposeClient(compose_results=[result])
 
@@ -607,10 +604,13 @@ def test_cli_status_no_patterns_exits_0(tmp_path: Path, capsys: pytest.CaptureFi
         'project_prefix = "myapp"\ncompose_file = "compose.yaml"\n[[service]]\nname = "db"\n',
         encoding="utf-8",
     )
-    with patch.dict("os.environ", {
-        "WINTER_EXT_CONFIG_DIR": str(config_dir),
-        "WINTER_WORKSPACE_DIR": str(tmp_path),
-    }):
+    with patch.dict(
+        "os.environ",
+        {
+            "WINTER_EXT_CONFIG_DIR": str(config_dir),
+            "WINTER_WORKSPACE_DIR": str(tmp_path),
+        },
+    ):
         rc = cli_main(["status"])
     assert rc == 0
     captured = capsys.readouterr()
@@ -620,7 +620,7 @@ def test_cli_status_no_patterns_exits_0(tmp_path: Path, capsys: pytest.CaptureFi
 
 
 def test_cli_status_with_env_pattern(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """CLI status with an env pattern and a FakeComposeClient (via monkeypatching)."""
+    """CLI status with an env pattern exits 0 and emits valid JSON."""
     config_dir = tmp_path / "config"
     config_dir.mkdir()
     (config_dir / "config.toml").write_text(
@@ -631,28 +631,14 @@ def test_cli_status_with_env_pattern(tmp_path: Path, capsys: pytest.CaptureFixtu
     alpha_dir.mkdir()
     (alpha_dir / ".winter.env").write_text("WINTER_ENV=alpha\nWINTER_PORT_BASE=4020\n", encoding="utf-8")
 
-    # Patch ComposeClient to use a fake that returns canned ps output
-    containers = [_container("db", "running", "healthy", publishers=[{"PublishedPort": 5432}])]
-    ps_stdout = _ps_json_lines(containers)
-    fake_result = subprocess.CompletedProcess([], 0, stdout=ps_stdout, stderr="")
-    fake = FakeComposeClient(compose_results=[fake_result])
-
-    import docker_orchestrator.cli as cli_mod
-    import docker_orchestrator.status as status_mod
-
-    original_compose_client = status_mod.ComposeClient
-
-    class PatchedComposeClient(ComposeClient):
-        def compose(self, *args, **kwargs):
-            return fake.compose(*args, **kwargs)
-
-    with patch.dict("os.environ", {
-        "WINTER_EXT_CONFIG_DIR": str(config_dir),
-        "WINTER_WORKSPACE_DIR": str(tmp_path),
-    }):
-        with patch.object(status_mod, "ComposeClient", PatchedComposeClient):
-            # The CLI creates its own ComposeClient() — we need to patch the import in cli.py
-            rc = cli_main(["status", "alpha"])
+    with patch.dict(
+        "os.environ",
+        {
+            "WINTER_EXT_CONFIG_DIR": str(config_dir),
+            "WINTER_WORKSPACE_DIR": str(tmp_path),
+        },
+    ):
+        rc = cli_main(["status", "alpha"])
 
     assert rc == 0
     captured = capsys.readouterr()
@@ -678,10 +664,12 @@ def test_cmd_status_no_patterns_enumerates_two_envs(tmp_path: Path, capsys: pyte
 
     containers = [_container("db", "running")]
     ps_stdout = _ps_json_lines(containers)
-    fake = FakeComposeClient(compose_results=[
-        subprocess.CompletedProcess([], 0, stdout=ps_stdout, stderr=""),
-        subprocess.CompletedProcess([], 0, stdout=ps_stdout, stderr=""),
-    ])
+    fake = FakeComposeClient(
+        compose_results=[
+            subprocess.CompletedProcess([], 0, stdout=ps_stdout, stderr=""),
+            subprocess.CompletedProcess([], 0, stdout=ps_stdout, stderr=""),
+        ]
+    )
     manifest = _make_manifest(services=["db"])
 
     rc = cmd_status(patterns=[], manifest=manifest, workspace_root=tmp_path, client=fake)
@@ -705,10 +693,12 @@ def test_cmd_status_wildcard_env_pattern_matches_enumerated(tmp_path: Path, caps
 
     containers = [_container("db", "running")]
     ps_stdout = _ps_json_lines(containers)
-    fake = FakeComposeClient(compose_results=[
-        subprocess.CompletedProcess([], 0, stdout=ps_stdout, stderr=""),
-        subprocess.CompletedProcess([], 0, stdout=ps_stdout, stderr=""),
-    ])
+    fake = FakeComposeClient(
+        compose_results=[
+            subprocess.CompletedProcess([], 0, stdout=ps_stdout, stderr=""),
+            subprocess.CompletedProcess([], 0, stdout=ps_stdout, stderr=""),
+        ]
+    )
     manifest = _make_manifest(services=["db", "api"])
 
     rc = cmd_status(patterns=["*/db"], manifest=manifest, workspace_root=tmp_path, client=fake)
@@ -736,7 +726,9 @@ def test_cmd_status_ps_args_include_all_flag(tmp_workspace: Path, capsys: pytest
     assert "--all" in call.args
 
 
-def test_cmd_status_exited_container_maps_to_stopped_via_all(tmp_workspace: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_cmd_status_exited_container_maps_to_stopped_via_all(
+    tmp_workspace: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """An exited container returned by ps --all maps to state=stopped."""
     containers = [_container("db", "exited")]
     fake = _fake_client_ps(containers)
@@ -759,9 +751,11 @@ def test_poll_readiness_exited_container_is_not_ready() -> None:
         "Name": "myapp-alpha-db-1",
     }
     stdout = json.dumps(exited_ct)
-    fake = FakeComposeClient(compose_results=[
-        subprocess.CompletedProcess([], 0, stdout=stdout, stderr=""),
-    ])
+    fake = FakeComposeClient(
+        compose_results=[
+            subprocess.CompletedProcess([], 0, stdout=stdout, stderr=""),
+        ]
+    )
     ready, name = _poll_readiness("myapp-alpha", "compose.yaml", fake, {})
     assert ready is False
     assert name != ""
@@ -773,9 +767,11 @@ def test_poll_readiness_ps_args_include_all_flag() -> None:
 
     healthy_ct = {"Service": "db", "State": "running", "Name": "myapp-alpha-db-1"}
     stdout = json.dumps(healthy_ct)
-    fake = FakeComposeClient(compose_results=[
-        subprocess.CompletedProcess([], 0, stdout=stdout, stderr=""),
-    ])
+    fake = FakeComposeClient(
+        compose_results=[
+            subprocess.CompletedProcess([], 0, stdout=stdout, stderr=""),
+        ]
+    )
     _poll_readiness("myapp-alpha", "compose.yaml", fake, {})
     call = fake.compose_calls[0]
     assert "--all" in call.args
@@ -786,17 +782,18 @@ def test_poll_readiness_ps_args_include_all_flag() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_cli_describe_empty_config_dir_emits_diagnostic(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_cli_describe_empty_config_dir_emits_diagnostic(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     """describe with a config dir but no config.toml emits a stderr diagnostic."""
     config_dir = tmp_path / "config"
     config_dir.mkdir()
 
-    with patch.dict("os.environ", {
-        "WINTER_EXT_CONFIG_DIR": str(config_dir),
-        "WINTER_WORKSPACE_DIR": str(tmp_path),
-    }):
+    with patch.dict(
+        "os.environ",
+        {
+            "WINTER_EXT_CONFIG_DIR": str(config_dir),
+            "WINTER_WORKSPACE_DIR": str(tmp_path),
+        },
+    ):
         rc = cli_main(["describe"])
 
     assert rc == 0
@@ -806,17 +803,18 @@ def test_cli_describe_empty_config_dir_emits_diagnostic(
     assert doc == {"services": []}
 
 
-def test_cli_status_empty_config_dir_emits_diagnostic(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_cli_status_empty_config_dir_emits_diagnostic(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     """status with a config dir but no config.toml emits a stderr diagnostic."""
     config_dir = tmp_path / "config"
     config_dir.mkdir()
 
-    with patch.dict("os.environ", {
-        "WINTER_EXT_CONFIG_DIR": str(config_dir),
-        "WINTER_WORKSPACE_DIR": str(tmp_path),
-    }):
+    with patch.dict(
+        "os.environ",
+        {
+            "WINTER_EXT_CONFIG_DIR": str(config_dir),
+            "WINTER_WORKSPACE_DIR": str(tmp_path),
+        },
+    ):
         rc = cli_main(["status"])
 
     assert rc == 0

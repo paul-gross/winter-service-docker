@@ -25,10 +25,7 @@ def service_matches_any_pattern(env_name: str, svc_name: str, patterns: list[str
     if not patterns:
         return True
     for pattern in patterns:
-        if "/" not in pattern:
-            expanded = f"{pattern}/*"
-        else:
-            expanded = pattern
+        expanded = f"{pattern}/*" if "/" not in pattern else pattern
         env_pat, svc_pat = expanded.split("/", 1)
         if fnmatch.fnmatchcase(env_name, env_pat) and fnmatch.fnmatchcase(svc_name, svc_pat):
             return True
@@ -46,10 +43,7 @@ def envs_from_patterns(patterns: list[str]) -> list[str]:
     envs: list[str] = []
     seen: set[str] = set()
     for pat in patterns:
-        if "/" not in pat:
-            env_seg = pat
-        else:
-            env_seg = pat.split("/", 1)[0]
+        env_seg = pat if "/" not in pat else pat.split("/", 1)[0]
         if env_seg and "*" not in env_seg and "?" not in env_seg and env_seg not in seen:
             seen.add(env_seg)
             envs.append(env_seg)

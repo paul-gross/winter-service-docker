@@ -21,8 +21,6 @@ import sys
 from io import StringIO
 from pathlib import Path
 
-import pytest
-
 from docker_orchestrator.env_context import (
     WORKSPACE_SCOPE,
     build_env_context,
@@ -39,7 +37,6 @@ from docker_orchestrator.status import (
     cmd_status,
 )
 from tests.fakes import FakeComposeClient
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -76,7 +73,7 @@ def _running_container(svc: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 1–3: env_context derivation for workspace scope
+# 1-3: env_context derivation for workspace scope
 # ---------------------------------------------------------------------------
 
 
@@ -148,13 +145,13 @@ class TestWorkspaceExactMatch:
     def test_work_glob_slash_svc_not_matches_workspace(self) -> None:
         """``work*/<svc>`` does not match the workspace scope in pattern matching."""
         # _service_matches_any_pattern: env_name="workspace", svc_name="db", pattern="work*/db"
-        result = _service_matches_any_pattern("workspace", "db", ["work*/db"])
-        # This DOES match because fnmatch("workspace", "work*") is True —
+        _service_matches_any_pattern("workspace", "db", ["work*/db"])
+        # This DOES match because fnmatch("workspace", "work*") is True --
         # the exact-token restriction applies at the env-resolution level (_envs_from_patterns),
         # not at the lower fnmatch level. This test documents the design boundary.
         # The important contract: winter itself never sends work* as a concrete env token;
         # _envs_from_patterns filters wildcard env segments out before they reach docker.
-        pass  # intentionally not asserting here — just documenting the boundary
+        pass  # intentionally not asserting here -- just documenting the boundary
 
     def test_wildcard_env_segment_excluded_from_envs_from_patterns(self) -> None:
         """Wildcard env segments are excluded from _envs_from_patterns entirely."""
@@ -216,8 +213,8 @@ class TestDownWorkspace:
 
     def test_down_workspace_no_volumes_flag_in_full_argv(self, tmp_path: Path) -> None:
         """Verify the full argv forwarded to compose never contains volume flags."""
-        from tests.fakes import FakeRunner
         from docker_orchestrator.compose_client import ComposeClient
+        from tests.fakes import FakeRunner
 
         runner = FakeRunner(default_result=subprocess.CompletedProcess([], 0, stdout="", stderr=""))
         client = ComposeClient(runner=runner)
@@ -274,10 +271,7 @@ class TestUpWorkspace:
         )
         manifest = _make_manifest(prefix="myapp", workspace_services=["db"])
         time_fn, sleep_fn = self._clock()
-        rc = cmd_up(
-            "workspace", manifest, tmp_path, client,
-            time_fn=time_fn, sleep_fn=sleep_fn, timeout=10.0
-        )
+        rc = cmd_up("workspace", manifest, tmp_path, client, time_fn=time_fn, sleep_fn=sleep_fn, timeout=10.0)
         assert rc == 0
         up_call = client.compose_calls[0]
         assert up_call.project == "myapp-workspace"
@@ -292,10 +286,7 @@ class TestUpWorkspace:
         )
         manifest = _make_manifest(prefix="myapp", workspace_services=["db"])
         time_fn, sleep_fn = self._clock()
-        cmd_up(
-            "workspace", manifest, tmp_path, client,
-            time_fn=time_fn, sleep_fn=sleep_fn, timeout=10.0
-        )
+        cmd_up("workspace", manifest, tmp_path, client, time_fn=time_fn, sleep_fn=sleep_fn, timeout=10.0)
         up_call = client.compose_calls[0]
         env = up_call.env or {}
         wsd_port_keys = [k for k in env if k.startswith("WSD_PORT_")]
@@ -311,17 +302,13 @@ class TestUpWorkspace:
         )
         manifest = _make_manifest(prefix="myapp", workspace_services=["db"])
         time_fn, sleep_fn = self._clock()
-        cmd_up(
-            "workspace", manifest, tmp_path, client,
-            time_fn=time_fn, sleep_fn=sleep_fn, timeout=10.0
-        )
+        cmd_up("workspace", manifest, tmp_path, client, time_fn=time_fn, sleep_fn=sleep_fn, timeout=10.0)
         up_call = client.compose_calls[0]
         env = up_call.env or {}
         assert env.get("COMPOSE_PROJECT_NAME") == "myapp-workspace"
 
     def test_build_compose_env_workspace_no_port_vars(self, tmp_path: Path) -> None:
         """_build_compose_env with workspace context omits WSD_PORT_* vars."""
-        from docker_orchestrator.lifecycle import _build_compose_env
 
         ctx = build_env_context("workspace", "myapp", tmp_path)
         manifest = _make_manifest(services=["db", "api"])
@@ -343,11 +330,7 @@ class TestStatusWorkspace:
         """Status document for workspace scope has env="workspace"."""
         containers = [_running_container("db")]
         ps_json = "\n".join(json.dumps(c) for c in containers)
-        client = FakeComposeClient(
-            compose_results=[
-                subprocess.CompletedProcess([], 0, stdout=ps_json, stderr="")
-            ]
-        )
+        client = FakeComposeClient(compose_results=[subprocess.CompletedProcess([], 0, stdout=ps_json, stderr="")])
         manifest = _make_manifest(prefix="myapp", workspace_services=["db"])
         out = StringIO()
         old_stdout = sys.stdout
@@ -368,11 +351,7 @@ class TestStatusWorkspace:
         """Status document for workspace scope has port_base=null."""
         containers = [_running_container("db")]
         ps_json = "\n".join(json.dumps(c) for c in containers)
-        client = FakeComposeClient(
-            compose_results=[
-                subprocess.CompletedProcess([], 0, stdout=ps_json, stderr="")
-            ]
-        )
+        client = FakeComposeClient(compose_results=[subprocess.CompletedProcess([], 0, stdout=ps_json, stderr="")])
         manifest = _make_manifest(prefix="myapp", workspace_services=["db"])
         out = StringIO()
         old_stdout = sys.stdout
@@ -388,11 +367,7 @@ class TestStatusWorkspace:
 
     def test_status_workspace_compose_project(self, tmp_path: Path) -> None:
         """cmd_status for workspace queries compose project <prefix>-workspace."""
-        client = FakeComposeClient(
-            compose_results=[
-                subprocess.CompletedProcess([], 0, stdout="", stderr="")
-            ]
-        )
+        client = FakeComposeClient(compose_results=[subprocess.CompletedProcess([], 0, stdout="", stderr="")])
         manifest = _make_manifest(prefix="myapp", workspace_services=["db"])
         out = StringIO()
         old_stdout = sys.stdout
@@ -409,11 +384,7 @@ class TestStatusWorkspace:
         """Status for a running workspace service reports running/unknown health."""
         containers = [_running_container("db")]
         ps_json = "\n".join(json.dumps(c) for c in containers)
-        client = FakeComposeClient(
-            compose_results=[
-                subprocess.CompletedProcess([], 0, stdout=ps_json, stderr="")
-            ]
-        )
+        client = FakeComposeClient(compose_results=[subprocess.CompletedProcess([], 0, stdout=ps_json, stderr="")])
         manifest = _make_manifest(prefix="myapp", workspace_services=["db"])
         out = StringIO()
         old_stdout = sys.stdout
@@ -458,9 +429,7 @@ class TestRestartWorkspace:
 
     def test_restart_workspace_multiple_svcs(self, tmp_path: Path) -> None:
         """cmd_restart workspace/* restarts all declared services in workspace."""
-        client = FakeComposeClient(
-            compose_results=[_ok_result(0), _ok_result(0)]
-        )
+        client = FakeComposeClient(compose_results=[_ok_result(0), _ok_result(0)])
         manifest = _make_manifest(prefix="myapp", workspace_services=["db", "api"])
         rc = cmd_restart(["workspace/*"], manifest, tmp_path, client)
         assert rc == 0
@@ -487,11 +456,7 @@ class TestLogsWorkspace:
 
     def test_logs_workspace_svc_project(self, tmp_path: Path) -> None:
         """cmd_logs workspace/db queries compose project <prefix>-workspace."""
-        client = FakeComposeClient(
-            compose_results=[
-                subprocess.CompletedProcess([], 0, stdout="", stderr="")
-            ]
-        )
+        client = FakeComposeClient(compose_results=[subprocess.CompletedProcess([], 0, stdout="", stderr="")])
         manifest = _make_manifest(prefix="myapp", workspace_services=["db"])
         sink = StringIO()
         cmd_logs(["workspace/db"], manifest, tmp_path, client, sink=sink)
@@ -501,11 +466,7 @@ class TestLogsWorkspace:
     def test_logs_workspace_env_in_ndjson(self, tmp_path: Path) -> None:
         """NDJSON output from workspace logs has env="workspace"."""
         log_line = "2024-01-15T10:23:45.123456789Z hello from workspace\n"
-        client = FakeComposeClient(
-            compose_results=[
-                subprocess.CompletedProcess([], 0, stdout=log_line, stderr="")
-            ]
-        )
+        client = FakeComposeClient(compose_results=[subprocess.CompletedProcess([], 0, stdout=log_line, stderr="")])
         manifest = _make_manifest(prefix="myapp", workspace_services=["db"])
         sink = StringIO()
         cmd_logs(["workspace/db"], manifest, tmp_path, client, sink=sink)

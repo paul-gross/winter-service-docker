@@ -27,7 +27,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from docker_orchestrator.compose_client import ComposeClient
+from docker_orchestrator.compose_client import IComposeClient
 from docker_orchestrator.env_context import build_env_context, resolve_env_file
 from docker_orchestrator.manifest import DockerManifest
 from docker_orchestrator.patterns import envs_from_patterns, service_matches_any_pattern
@@ -86,7 +86,7 @@ def cmd_restart(
     patterns: list[str],
     manifest: DockerManifest,
     workspace_root: Path,
-    client: ComposeClient,
+    client: IComposeClient,
 ) -> int:
     """Implement ``restart <pattern>...``.
 
