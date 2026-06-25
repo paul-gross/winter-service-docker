@@ -208,7 +208,7 @@ def test_cli_describe_no_config(tmp_path: Path, capsys: pytest.CaptureFixture[st
 
 
 def test_cli_describe_with_services(config_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """describe with configured services emits the service name list."""
+    """describe emits scope-qualified names: */db and */api for project-scoped services."""
     (config_dir / "config.toml").write_text(
         'project_prefix = "myapp"\n'
         'environment_compose_file = "compose.yaml"\n'
@@ -222,7 +222,9 @@ def test_cli_describe_with_services(config_dir: Path, capsys: pytest.CaptureFixt
     assert rc == 0
     captured = capsys.readouterr()
     doc = json.loads(captured.out)
-    assert doc == {"services": ["db", "api"]}
+    # describe now emits scope-qualified names (*/name for project, workspace/name for workspace)
+    # so that winter-cli core can split the workspace vs per-env axis in the status call-matrix.
+    assert set(doc["services"]) == {"*/db", "*/api"}
 
 
 # ---------------------------------------------------------------------------

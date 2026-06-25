@@ -31,7 +31,13 @@ _REFUSE_EXIT = 3
 
 
 def _cmd_describe(workspace_root: Path | None) -> int:
-    """Emit ``{"services": [...]}`` from the configured service list, exit 0."""
+    """Emit scope-qualified ``{"services": [...]}`` from the configured service list.
+
+    Emits ``workspace/<name>`` for workspace-scoped services and ``*/<name>`` for
+    project-scoped services, matching the ``catalog`` action's output shape.  This
+    allows winter-cli core to split the workspace vs per-env axis when building the
+    status call-matrix (Phase 2 of winter#109).
+    """
     from docker_orchestrator.manifest import _CONFIG_FILE, resolve_config_dir
 
     config_dir = resolve_config_dir(workspace_root)
@@ -41,8 +47,12 @@ def _cmd_describe(workspace_root: Path | None) -> int:
             file=sys.stderr,
         )
     manifest = load_manifest(config_dir)
-    service_names = manifest.all_service_names()
-    sys.stdout.write(json.dumps({"services": service_names}) + "\n")
+    names: list[str] = []
+    for svc in manifest.workspace_services:
+        names.append(f"workspace/{svc.name}")
+    for svc in manifest.services:
+        names.append(f"*/{svc.name}")
+    sys.stdout.write(json.dumps({"services": names}) + "\n")
     sys.stdout.flush()
     return 0
 

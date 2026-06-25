@@ -646,12 +646,18 @@ class TestLogsScopeCorrectness:
 
 
 class TestDescribeBothScopes:
-    """describe emits names from both project and workspace partitions."""
+    """describe emits scope-qualified names from both project and workspace partitions.
+
+    Phase 2 (winter#109): ``_cmd_describe`` now emits ``workspace/<name>`` for
+    workspace-scoped services and ``*/<name>`` for project-scoped services, matching
+    the ``catalog`` action.  This lets winter-cli core split the workspace vs per-env
+    axis when building the status call-matrix.
+    """
 
     def test_describe_lists_project_and_workspace_services(
         self, config_dir: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        """describe with mixed scope manifest emits names from both partitions."""
+        """describe with mixed scope manifest emits scope-qualified names from both partitions."""
         (config_dir / "config.toml").write_text(
             'project_prefix = "myapp"\nenvironment_compose_file = "compose.yaml"\nworkspace_compose_file = "workspace-compose.yaml"\n'
             '[[service]]\nname = "backend"\n'
@@ -664,10 +670,11 @@ class TestDescribeBothScopes:
         assert rc == 0
         captured = capsys.readouterr()
         doc = json.loads(captured.out)
-        assert set(doc["services"]) == {"backend", "db"}
+        # Scope-qualified: */backend for project scope, workspace/db for workspace scope.
+        assert set(doc["services"]) == {"workspace/db", "*/backend"}
 
     def test_describe_workspace_only_manifest(self, config_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        """describe with only workspace-scoped services lists those names."""
+        """describe with only workspace-scoped services lists workspace-qualified names."""
         (config_dir / "config.toml").write_text(
             'project_prefix = "myapp"\nenvironment_compose_file = "compose.yaml"\nworkspace_compose_file = "workspace-compose.yaml"\n'
             '[[service]]\nname = "db"\nscope = "workspace"\n'
@@ -679,10 +686,14 @@ class TestDescribeBothScopes:
 
         assert rc == 0
         doc = json.loads(capsys.readouterr().out)
-        assert set(doc["services"]) == {"db", "redis"}
+        assert set(doc["services"]) == {"workspace/db", "workspace/redis"}
 
-    def test_describe_order_project_then_workspace(self, config_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        """describe emits project services first, then workspace services."""
+    def test_describe_order_workspace_then_project(self, config_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        """describe emits workspace services first (scope-qualified), then project services.
+
+        _cmd_describe appends workspace/* names first (for workspace_services),
+        then */name for project services, mirroring _cmd_catalog order.
+        """
         (config_dir / "config.toml").write_text(
             'project_prefix = "myapp"\nenvironment_compose_file = "compose.yaml"\nworkspace_compose_file = "workspace-compose.yaml"\n'
             '[[service]]\nname = "api"\n'
@@ -694,8 +705,10 @@ class TestDescribeBothScopes:
 
         doc = json.loads(capsys.readouterr().out)
         services = doc["services"]
-        # api (project) should appear before db (workspace)
-        assert services.index("api") < services.index("db")
+        # workspace/db appears first (workspace services listed first in _cmd_describe).
+        assert "workspace/db" in services
+        assert "*/api" in services
+        assert services.index("workspace/db") < services.index("*/api")
 
 
 # ---------------------------------------------------------------------------

@@ -7,6 +7,12 @@ winter --service-orchestrator=/path/to/gamma/winter-service-docker service descr
 winter --service-orchestrator=/path/to/gamma/winter-service-docker service status alpha
 ```
 
+**Verifying the `status` path requires the feature core too.** Since winter#109, `status` env enumeration and `.winter.env` sourcing live in winter-cli core, not this provider. If you are verifying a change that touches the status path, also point at the feature core with `--winter` (see `workspace:/ai/winter-cli/root-flags.md`):
+
+```bash
+winter --winter=./alpha/winter --service-orchestrator=./alpha/winter-service-docker service status alpha
+```
+
 As a fallback, export the vars manually and invoke the entrypoint directly:
 
 ```bash

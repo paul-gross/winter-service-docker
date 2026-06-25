@@ -16,10 +16,21 @@ The compose ``ps --all --format json`` output is either:
 
 Both encodings are handled: try line-delimited objects first, fall back to a
 top-level array.
+
+Scope identification (Phase 3 — core injection):
+  Winter-cli core invokes this provider as ``status <scope>/*`` (e.g.
+  ``status alpha/*`` or ``status workspace/*``) with ``WINTER_ENV``,
+  ``WINTER_ENV_INDEX``, and ``WINTER_PORT_BASE`` already present in the
+  process environment.  The provider reads the scope from the ``<scope>/*``
+  pattern argument (primary source); ``WINTER_ENV`` is available in the
+  environment as a cross-check.  The provider does NOT enumerate envs or
+  source ``.winter.env`` on the status path — all variable injection is
+  the responsibility of core.
 """
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -30,7 +41,7 @@ from docker_orchestrator.compose_ps import (
     map_docker_state,
     parse_compose_ps_output,
 )
-from docker_orchestrator.env_context import build_env_context, resolve_env_file
+from docker_orchestrator.env_context import compose_project_name as _compose_project_name
 from docker_orchestrator.manifest import DockerManifest
 from docker_orchestrator.patterns import envs_from_patterns, has_glob, service_matches_any_pattern
 
@@ -71,28 +82,38 @@ def _extract_ports(publishers: object) -> list[int]:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Env enumeration from workspace directory
+# Port-substitution helpers (status path)
 # ──────────────────────────────────────────────────────────────────────────────
 
-_WINTER_ENV_FILE = ".winter.env"
 
+def _port_env_vars_for_status(services: tuple, port_base: int) -> dict[str, str]:
+    """Build ``WSD_PORT_<SVC>`` vars for the compose ps invocation.
 
-def _enumerate_workspace_envs(workspace_root: Path) -> list[str]:
-    """Scan ``workspace_root`` for immediate subdirs that contain ``.winter.env``.
-
-    These are feature envs.  The workspace root itself is excluded (it has no
-    ``.winter.env`` at its own level).  Returns env names in filesystem order.
+    Mirrors the same computation in ``lifecycle._port_env_vars`` so that
+    ``docker compose ps`` resolves placeholders the same way ``up`` does.
     """
-    envs: list[str] = []
-    try:
-        for entry in sorted(workspace_root.iterdir()):
-            if not entry.is_dir():
-                continue
-            if (entry / _WINTER_ENV_FILE).is_file():
-                envs.append(entry.name)
-    except OSError:
-        pass
-    return envs
+    return {f"WSD_PORT_{svc.name.upper()}": str(port_base + i) for i, svc in enumerate(services)}
+
+
+def _build_status_compose_env(
+    project_name: str,
+    scoped_services: tuple,
+    port_base: int | None,
+) -> dict[str, str]:
+    """Build the environment dict for the status compose ps call.
+
+    Starts from the current process environment (which already contains the
+    core-injected ``WINTER_ENV``/``WINTER_ENV_INDEX``/``WINTER_PORT_BASE`` and
+    every variable sourced from the scope's env file), then overlays
+    ``COMPOSE_PROJECT_NAME`` and, when *port_base* is not None, the
+    ``WSD_PORT_*`` port-substitution vars.  No ``.winter.env`` file is sourced
+    here — core has already done that.
+    """
+    env: dict[str, str] = dict(os.environ)
+    env["COMPOSE_PROJECT_NAME"] = project_name
+    if port_base is not None:
+        env.update(_port_env_vars_for_status(scoped_services, port_base))
+    return env
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -145,6 +166,11 @@ def _status_for_env(
     """Build the env status entry by querying docker compose ps.
 
     Returns a dict conforming to the winter env-keyed status document env shape.
+
+    On the status path, ``WINTER_PORT_BASE`` is read from the process environment
+    (injected by winter-cli core) rather than from the ``.winter.env`` file.  No
+    env-file sourcing is performed here — core has already done that before
+    invoking this provider.
     """
     # Require manifest fields
     compose_file = manifest.compose_file_for_scope(env)
@@ -160,14 +186,26 @@ def _status_for_env(
             "services": [],
         }
 
-    ctx = build_env_context(env, manifest.project_prefix, workspace_root)
+    # Read WINTER_PORT_BASE from the process environment (injected by core).
+    # Do NOT read the .winter.env file on the status path — core sources it.
+    import contextlib
+
+    port_base: int | None = None
+    raw_port_base = os.environ.get("WINTER_PORT_BASE")
+    if raw_port_base is not None:
+        with contextlib.suppress(ValueError):
+            port_base = int(raw_port_base)
+
+    project_name = _compose_project_name(manifest.project_prefix, env)
+    scoped_services = manifest.services_for_scope(env)
+    compose_env = _build_status_compose_env(project_name, scoped_services, port_base)
 
     result = client.compose(
-        ctx.compose_project_name,
+        project_name,
         compose_file,
         ["ps", "--all", "--format", "json"],
         capture_output=True,
-        source_env_file=resolve_env_file(workspace_root, env),
+        env=compose_env,
     )
 
     containers = parse_compose_ps_output(result.stdout or "")
@@ -219,7 +257,7 @@ def _status_for_env(
     return {
         "env": env,
         "session": None,
-        "port_base": ctx.port_base,
+        "port_base": port_base,
         "services": service_entries,
     }
 
@@ -241,47 +279,49 @@ def cmd_status(
 
     Emits winter's env-keyed status document as JSON on stdout, exits 0.
 
-    When no patterns are supplied (or all pattern env-segments are wildcards),
-    candidate envs are enumerated by scanning ``workspace_root`` for immediate
-    subdirectories that contain a ``.winter.env`` file.  When a pattern's
-    env-segment contains a glob (``*``/``?``), it is matched against the
-    enumerated env names via fnmatch.  The reserved ``workspace`` token
-    continues to resolve exactly (it is not a glob).  Stdout stays pure JSON.
+    **Phase 3 — core injection contract.**  Winter-cli core invokes this
+    provider once per scope as ``status <scope>/*`` (e.g. ``status alpha/*``
+    or ``status workspace/*``) with ``WINTER_ENV``, ``WINTER_ENV_INDEX``, and
+    ``WINTER_PORT_BASE`` (plus every variable sourced from the scope's env
+    file) already present in the process environment.
+
+    Scope identification precedence:
+    1. The env segment of the first pattern argument (``<scope>/*`` → ``scope``).
+       Core always supplies a concrete, non-wildcard scope here.
+    2. ``WINTER_ENV`` from the process environment (cross-check / fallback when
+       patterns is empty — should not happen in normal core-driven calls).
+
+    The provider does NOT enumerate envs from the filesystem and does NOT
+    source ``.winter.env`` on the status path — those are core's
+    responsibilities.  ``WINTER_PORT_BASE`` is read from ``os.environ``.
+
+    Service-level pattern filtering (the ``/<svc>`` segment) is still applied
+    within the single resolved scope so scope-qualified patterns like
+    ``alpha/db`` work correctly.
     """
-    # Derive concrete env names from patterns, then add any that need enumeration.
-    concrete_envs = envs_from_patterns(patterns)
-    concrete_set = set(concrete_envs)
+    # Resolve the single concrete scope from the pattern argument.
+    # Core passes exactly one concrete scope per call (e.g. "alpha/*").
+    env: str | None = None
+    if patterns:
+        env_seg = patterns[0].split("/", 1)[0] if "/" in patterns[0] else patterns[0]
+        if env_seg and not has_glob(env_seg):
+            env = env_seg
 
-    # Check whether any pattern has a wildcard env-segment or patterns is empty.
-    needs_enumeration = not patterns or any(has_glob(p.split("/", 1)[0] if "/" in p else p) for p in patterns)
+    # Fallback: read WINTER_ENV from the injected process environment.
+    if env is None:
+        env = os.environ.get("WINTER_ENV") or None
 
-    if needs_enumeration:
-        enumerated = _enumerate_workspace_envs(workspace_root)
-        for env in enumerated:
-            if env not in concrete_set:
-                # Apply wildcard env patterns against enumerated envs
-                if not patterns:
-                    # No patterns → include all enumerated envs
-                    concrete_envs.append(env)
-                    concrete_set.add(env)
-                else:
-                    # Has patterns but some have wildcard env-segments — check
-                    # whether any of those wildcard patterns matches this env.
-                    import fnmatch as _fnmatch
+    if env is None:
+        # No scope available — emit empty document; this should not happen in
+        # normal core-driven calls.
+        doc: dict = {"envs": []}  # type: ignore[type-arg]
+        sys.stdout.write(json.dumps(doc) + "\n")
+        sys.stdout.flush()
+        return 0
 
-                    for pat in patterns:
-                        env_seg = pat.split("/", 1)[0] if "/" in pat else pat
-                        if has_glob(env_seg) and _fnmatch.fnmatchcase(env, env_seg):
-                            concrete_envs.append(env)
-                            concrete_set.add(env)
-                            break
+    env_doc = _status_for_env(env, manifest, workspace_root, client, patterns)
 
-    env_docs: list[dict] = []  # type: ignore[type-arg]
-    for env in concrete_envs:
-        env_doc = _status_for_env(env, manifest, workspace_root, client, patterns)
-        env_docs.append(env_doc)
-
-    doc = {"envs": env_docs}
+    doc = {"envs": [env_doc]}
     sys.stdout.write(json.dumps(doc) + "\n")
     sys.stdout.flush()
     return 0

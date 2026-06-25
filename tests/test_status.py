@@ -1,4 +1,4 @@
-"""Phase 2 unit tests for the ``status`` command implementation.
+"""Unit tests for the ``status`` command implementation.
 
 Covers:
 1. Docker → winter state/health mapping (each case per the contract doc).
@@ -10,6 +10,7 @@ Covers:
 7. Declared service not returned by compose ps → stopped/unknown.
 8. cmd_status integration via FakeComposeClient.
 9. CLI dispatch: ``status`` exits 0 and emits valid JSON.
+10. Phase 3 contract: WINTER_PORT_BASE injected via env; no self-sourcing; single-scope behaviour.
 """
 
 from __future__ import annotations
@@ -329,27 +330,31 @@ def test_envs_from_patterns_multiple_envs() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_cmd_status_no_patterns_enumerates_envs(tmp_workspace: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """No patterns → enumerates envs from workspace .winter.env dirs (Fix #1)."""
-    # tmp_workspace fixture seeds alpha/.winter.env, so alpha is discovered.
+def test_cmd_status_no_patterns_uses_winter_env(tmp_workspace: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """No patterns → falls back to WINTER_ENV from process env (Phase 3 contract)."""
+    # Phase 3: core injects WINTER_ENV; provider does NOT enumerate the filesystem.
     containers = [_container("db", "running")]
     fake = _fake_client_ps(containers)
     manifest = _make_manifest(services=["db"])
-    rc = cmd_status(patterns=[], manifest=manifest, workspace_root=tmp_workspace, client=fake)
+    with patch.dict("os.environ", {"WINTER_ENV": "alpha", "WINTER_PORT_BASE": "4020"}):
+        rc = cmd_status(patterns=[], manifest=manifest, workspace_root=tmp_workspace, client=fake)
     assert rc == 0
     captured = capsys.readouterr()
     doc = json.loads(captured.out)
     env_names = [e["env"] for e in doc["envs"]]
-    assert "alpha" in env_names
-    # compose was called for alpha
-    assert len(fake.compose_calls) >= 1
+    assert env_names == ["alpha"]
+    # compose was called exactly once for the single injected scope
+    assert len(fake.compose_calls) == 1
 
 
 def test_cmd_status_no_patterns_empty_workspace(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """No patterns + no .winter.env dirs → empty envs list."""
+    """No patterns + no WINTER_ENV in environment → empty envs list (Phase 3 contract)."""
     manifest = _make_manifest(services=["db"])
     fake = FakeComposeClient()
-    rc = cmd_status(patterns=[], manifest=manifest, workspace_root=tmp_path, client=fake)
+    # Ensure WINTER_ENV is not set so the fallback also finds nothing.
+    env = {k: v for k, v in __import__("os").environ.items() if k != "WINTER_ENV"}
+    with patch.dict("os.environ", env, clear=True):
+        rc = cmd_status(patterns=[], manifest=manifest, workspace_root=tmp_path, client=fake)
     assert rc == 0
     captured = capsys.readouterr()
     doc = json.loads(captured.out)
@@ -462,11 +467,12 @@ def test_cmd_status_array_encoding(tmp_workspace: Path, capsys: pytest.CaptureFi
 
 
 def test_cmd_status_document_shape(tmp_workspace: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """Every required field is present in the emitted document."""
+    """Every required field is present; port_base comes from injected WINTER_PORT_BASE."""
     containers = [_container("db", "running", "healthy", publishers=[{"PublishedPort": 5432}])]
     fake = _fake_client_ps(containers)
     manifest = _make_manifest(services=["db"])
-    rc = cmd_status(patterns=["alpha"], manifest=manifest, workspace_root=tmp_workspace, client=fake)
+    with patch.dict("os.environ", {"WINTER_PORT_BASE": "4020"}):
+        rc = cmd_status(patterns=["alpha"], manifest=manifest, workspace_root=tmp_workspace, client=fake)
     assert rc == 0
     doc = json.loads(capsys.readouterr().out)
 
@@ -474,7 +480,7 @@ def test_cmd_status_document_shape(tmp_workspace: Path, capsys: pytest.CaptureFi
     env_doc = doc["envs"][0]
     assert env_doc["env"] == "alpha"
     assert env_doc["session"] is None
-    assert env_doc["port_base"] == 4020  # from tmp_workspace fixture
+    assert env_doc["port_base"] == 4020  # from injected WINTER_PORT_BASE
     svc = env_doc["services"][0]
     assert "name" in svc
     assert "state" in svc
@@ -654,69 +660,103 @@ def test_cli_status_with_env_pattern(tmp_path: Path, capsys: pytest.CaptureFixtu
 
 
 # ---------------------------------------------------------------------------
-# Fix #1 — bare status enumerates envs from .winter.env; wildcard env matches
+# Phase 3 contract: single-scope, no self-enumeration, injected WINTER_PORT_BASE
 # ---------------------------------------------------------------------------
 
 
-def test_cmd_status_no_patterns_enumerates_two_envs(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """Bare status (no patterns) discovers envs with .winter.env and reports each."""
-    for env_name, port_base in [("alpha", 4020), ("beta", 4040)]:
-        env_dir = tmp_path / env_name
-        env_dir.mkdir()
-        (env_dir / ".winter.env").write_text(
-            f"WINTER_ENV={env_name}\nWINTER_PORT_BASE={port_base}\n",
-            encoding="utf-8",
-        )
-    (tmp_path / "not-an-env").mkdir()  # no .winter.env → not an env
-
+def test_cmd_status_single_scope_from_pattern(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Core passes ``alpha/*`` pattern; provider queries only the alpha scope."""
     containers = [_container("db", "running")]
     ps_stdout = _ps_json_lines(containers)
     fake = FakeComposeClient(
         compose_results=[
-            subprocess.CompletedProcess([], 0, stdout=ps_stdout, stderr=""),
             subprocess.CompletedProcess([], 0, stdout=ps_stdout, stderr=""),
         ]
     )
     manifest = _make_manifest(services=["db"])
 
-    rc = cmd_status(patterns=[], manifest=manifest, workspace_root=tmp_path, client=fake)
+    with patch.dict("os.environ", {"WINTER_ENV": "alpha", "WINTER_PORT_BASE": "4020"}):
+        rc = cmd_status(patterns=["alpha/*"], manifest=manifest, workspace_root=tmp_path, client=fake)
     assert rc == 0
     doc = json.loads(capsys.readouterr().out)
-    env_names = {e["env"] for e in doc["envs"]}
-    assert env_names == {"alpha", "beta"}
-    assert "not-an-env" not in env_names
-    assert len(fake.compose_calls) == 2
+    # Only one scope reported — no filesystem enumeration
+    assert len(doc["envs"]) == 1
+    assert doc["envs"][0]["env"] == "alpha"
+    assert len(fake.compose_calls) == 1
 
 
-def test_cmd_status_wildcard_env_pattern_matches_enumerated(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """A ``*/db`` pattern enumerates envs and applies the wildcard env filter."""
-    for env_name in ("alpha", "beta"):
-        env_dir = tmp_path / env_name
-        env_dir.mkdir()
-        (env_dir / ".winter.env").write_text(
-            f"WINTER_ENV={env_name}\nWINTER_PORT_BASE=4020\n",
-            encoding="utf-8",
-        )
+def test_cmd_status_reads_port_base_from_env_not_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """WINTER_PORT_BASE is read from the process environment, not the .winter.env file.
 
-    containers = [_container("db", "running")]
-    ps_stdout = _ps_json_lines(containers)
-    fake = FakeComposeClient(
-        compose_results=[
-            subprocess.CompletedProcess([], 0, stdout=ps_stdout, stderr=""),
-            subprocess.CompletedProcess([], 0, stdout=ps_stdout, stderr=""),
-        ]
+    The .winter.env file is ABSENT in this test.  A sentinel value (9999) is
+    injected via os.environ.  The returned port_base must reflect the injected
+    value, proving the provider does not self-source the file.
+    """
+    # Deliberately do NOT create alpha/.winter.env — if the provider tried to
+    # read the file it would get None; the injected sentinel 9999 must win.
+    manifest = _make_manifest(services=["db"])
+    fake = _fake_client_ps([])
+
+    with patch.dict("os.environ", {"WINTER_ENV": "alpha", "WINTER_PORT_BASE": "9999"}):
+        rc = cmd_status(patterns=["alpha/*"], manifest=manifest, workspace_root=tmp_path, client=fake)
+    assert rc == 0
+    doc = json.loads(capsys.readouterr().out)
+    assert doc["envs"][0]["port_base"] == 9999
+
+
+def test_cmd_status_injected_env_wins_over_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Injected WINTER_PORT_BASE wins even when the .winter.env file has a different value.
+
+    The file declares WINTER_PORT_BASE=4020 but the injected env carries 7777.
+    The status doc must show 7777, proving no self-sourcing on the status path.
+    """
+    alpha_dir = tmp_path / "alpha"
+    alpha_dir.mkdir()
+    (alpha_dir / ".winter.env").write_text(
+        "WINTER_ENV=alpha\nWINTER_PORT_BASE=4020\n",
+        encoding="utf-8",
     )
+    manifest = _make_manifest(services=["db"])
+    fake = _fake_client_ps([])
+
+    with patch.dict("os.environ", {"WINTER_ENV": "alpha", "WINTER_PORT_BASE": "7777"}):
+        rc = cmd_status(patterns=["alpha/*"], manifest=manifest, workspace_root=tmp_path, client=fake)
+    assert rc == 0
+    doc = json.loads(capsys.readouterr().out)
+    # 7777 (injected) must win over 4020 (file); no self-sourcing occurred
+    assert doc["envs"][0]["port_base"] == 7777
+
+
+def test_cmd_status_no_patterns_no_env_var_returns_empty(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """No patterns and no WINTER_ENV in environment → empty envs list (graceful)."""
+    manifest = _make_manifest(services=["db"])
+    fake = FakeComposeClient()
+    # Ensure WINTER_ENV is absent
+    env = {k: v for k, v in __import__("os").environ.items() if k != "WINTER_ENV"}
+    with patch.dict("os.environ", env, clear=True):
+        rc = cmd_status(patterns=[], manifest=manifest, workspace_root=tmp_path, client=fake)
+    assert rc == 0
+    doc = json.loads(capsys.readouterr().out)
+    assert doc == {"envs": []}
+    assert fake.compose_calls == []
+
+
+def test_cmd_status_scope_qualified_pattern_filters_service(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Core pattern ``alpha/db`` limits the reported services to db only."""
+    containers = [
+        _container("db", "running"),
+        _container("api", "running"),
+    ]
+    fake = _fake_client_ps(containers)
     manifest = _make_manifest(services=["db", "api"])
 
-    rc = cmd_status(patterns=["*/db"], manifest=manifest, workspace_root=tmp_path, client=fake)
+    with patch.dict("os.environ", {"WINTER_ENV": "alpha", "WINTER_PORT_BASE": "4020"}):
+        rc = cmd_status(patterns=["alpha/db"], manifest=manifest, workspace_root=tmp_path, client=fake)
     assert rc == 0
     doc = json.loads(capsys.readouterr().out)
-    env_names = {e["env"] for e in doc["envs"]}
-    assert env_names == {"alpha", "beta"}
-    for env_doc in doc["envs"]:
-        svc_names = [s["name"] for s in env_doc["services"]]
-        assert "db" in svc_names
-        assert "api" not in svc_names
+    assert doc["envs"][0]["env"] == "alpha"
+    svc_names = [s["name"] for s in doc["envs"][0]["services"]]
+    assert svc_names == ["db"]
 
 
 # ---------------------------------------------------------------------------

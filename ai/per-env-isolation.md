@@ -33,6 +33,8 @@ The offset is the 0-based declaration order among **project-scoped** `[[service]
 
 ## Env-file sourcing
 
-`WSD_PORT_*` is not the only way to feed ports into `environment-compose.yaml`. Before every compose invocation the orchestrator also **sources** the scope's winter env file, so a compose file can reference any variable that file defines — `${WINTER_PORT_BASE}`, a project-seeded `${WTS_DB_PORT}`, `${DATABASE_URL}`, etc. See `winter-service-docker:/ai/provider-contract.md#env-file-sourcing` for the full contract (which file per scope, sourcing-vs-parsing, precedence).
+`WSD_PORT_*` is not the only way to feed ports into `environment-compose.yaml`. For `up`, `down`, `restart`, and `logs`, the orchestrator **sources** the scope's winter env file in a shell before each compose invocation, so the file can carry shell arithmetic and the compose file can reference any variable it defines — `${WINTER_PORT_BASE}`, a project-seeded `${WTS_DB_PORT}`, `${DATABASE_URL}`, etc.
+
+For **`status`**, env-file sourcing is the responsibility of winter-cli core (not this provider). Core injects `WINTER_PORT_BASE` and all sourced env-file vars into the provider subprocess before calling it; the provider reads them from the process environment directly. See `winter-service-docker:/ai/provider-contract.md#env-file-sourcing` for the full contract (which file per scope, per-action sourcing ownership, sourcing-vs-parsing, and precedence).
 
 See `winter-service-docker:/workflow/config.toml.example` for the annotated schema.
