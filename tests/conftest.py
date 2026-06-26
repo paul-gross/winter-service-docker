@@ -1,8 +1,8 @@
 """Shared pytest fixtures for docker_orchestrator tests.
 
 Provides:
-- ``tmp_workspace``: a ``tmp_path``-based workspace root with a seeded
-  ``alpha/.winter.env`` so port-base tests don't need to build paths manually.
+- ``tmp_workspace``: a ``tmp_path``-based workspace root with an ``alpha/``
+  subdirectory so tests have a realistic workspace path structure.
 - ``config_dir``: a ``tmp_path``-based config dir ready for a ``config.toml``.
 """
 
@@ -15,17 +15,16 @@ import pytest
 
 @pytest.fixture()
 def tmp_workspace(tmp_path: Path) -> Path:
-    """Return a temporary workspace root with a seeded alpha env.
+    """Return a temporary workspace root with an alpha env directory.
 
-    Creates ``<root>/alpha/.winter.env`` with ``WINTER_PORT_BASE=4020`` and
-    ``WINTER_ENV=alpha`` so env-context tests have a real file to read.
+    Creates ``<root>/alpha/`` so env-context tests have a realistic path
+    structure.  Tests that need a specific ``WINTER_PORT_BASE`` value must
+    use ``monkeypatch.setenv("WINTER_PORT_BASE", ...)`` directly — the
+    value is now injected by winter-cli core via the process environment,
+    not read from a per-env file.
     """
-    alpha_dir = tmp_path / "alpha" / ".winter"
+    alpha_dir = tmp_path / "alpha"
     alpha_dir.mkdir(parents=True)
-    (alpha_dir.parent / ".winter.env").write_text(
-        "WINTER_ENV=alpha\nWINTER_ENV_INDEX=1\nWINTER_PORT_BASE=4020\n",
-        encoding="utf-8",
-    )
     return tmp_path
 
 

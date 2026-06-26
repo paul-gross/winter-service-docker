@@ -238,7 +238,7 @@ class TestManifestPartition:
 class TestUpDownScopeFiltering:
     """up workspace uses workspace partition; up alpha uses project partition."""
 
-    def test_up_alpha_calls_project_partition_only(self, tmp_path: Path) -> None:
+    def test_up_alpha_calls_project_partition_only(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """CORE PROBE: up alpha uses the environment compose file and the per-env project.
 
         With a mixed manifest (backend=project, db=workspace):
@@ -250,8 +250,8 @@ class TestUpDownScopeFiltering:
         This is the PRIMARY acceptance criterion for scope isolation — guaranteed
         by file layout rather than service-name masking.
         """
+        monkeypatch.setenv("WINTER_PORT_BASE", "4020")
         manifest = _mixed_manifest(project_services=["backend"], workspace_services=["db"])
-        ws = _alpha_workspace(tmp_path)
         time_fn, sleep_fn = _clock()
         client = FakeComposeClient(
             compose_results=[
@@ -259,7 +259,7 @@ class TestUpDownScopeFiltering:
                 _ps_result([_running_container("backend")]),  # readiness poll
             ]
         )
-        rc = cmd_up("alpha", manifest, ws, client, time_fn=time_fn, sleep_fn=sleep_fn, timeout=10.0)
+        rc = cmd_up("alpha", manifest, client, time_fn=time_fn, sleep_fn=sleep_fn, timeout=10.0)
         assert rc == 0
 
         up_call = client.compose_calls[0]
@@ -294,7 +294,7 @@ class TestUpDownScopeFiltering:
                 _ps_result([_running_container("db", project="myapp-workspace")]),  # readiness poll
             ]
         )
-        rc = cmd_up("workspace", manifest, tmp_path, client, time_fn=time_fn, sleep_fn=sleep_fn, timeout=10.0)
+        rc = cmd_up("workspace", manifest, client, time_fn=time_fn, sleep_fn=sleep_fn, timeout=10.0)
         assert rc == 0
 
         up_call = client.compose_calls[0]
@@ -316,7 +316,6 @@ class TestUpDownScopeFiltering:
         workspace services.  The readiness poll only queries myapp-alpha.
         """
         manifest = _mixed_manifest(project_services=["backend"], workspace_services=["db"])
-        ws = _alpha_workspace(tmp_path)
         time_fn, sleep_fn = _clock()
         client = FakeComposeClient(
             compose_results=[
@@ -324,7 +323,7 @@ class TestUpDownScopeFiltering:
                 _ps_result([_running_container("backend")]),
             ]
         )
-        cmd_up("alpha", manifest, ws, client, time_fn=time_fn, sleep_fn=sleep_fn, timeout=10.0)
+        cmd_up("alpha", manifest, client, time_fn=time_fn, sleep_fn=sleep_fn, timeout=10.0)
 
         # The up call must use the environment compose file (scope-pure isolation)
         up_call = client.compose_calls[0]
@@ -352,7 +351,7 @@ class TestUpDownScopeFiltering:
                 _ps_result([_running_container("db", project="myapp-workspace")]),
             ]
         )
-        cmd_up("workspace", manifest, tmp_path, client, time_fn=time_fn, sleep_fn=sleep_fn, timeout=10.0)
+        cmd_up("workspace", manifest, client, time_fn=time_fn, sleep_fn=sleep_fn, timeout=10.0)
 
         up_call = client.compose_calls[0]
         env = up_call.env or {}
@@ -377,7 +376,7 @@ class TestUpDownScopeFiltering:
             workspace_services=(),  # no workspace services
         )
         client = FakeComposeClient()
-        rc = cmd_up("workspace", manifest, tmp_path, client)
+        rc = cmd_up("workspace", manifest, client)
         assert rc == 0, f"expected 0, got {rc}"
         up_calls = [c for c in client.compose_calls if "up" in c.args]
         assert up_calls == [], (
@@ -398,9 +397,8 @@ class TestUpDownScopeFiltering:
             services=(),  # no project services
             workspace_services=(ServiceDecl(name="db"),),
         )
-        ws = _alpha_workspace(tmp_path)
         client = FakeComposeClient()
-        rc = cmd_up("alpha", manifest, ws, client)
+        rc = cmd_up("alpha", manifest, client)
         assert rc == 0, f"expected 0, got {rc}"
         up_calls = [c for c in client.compose_calls if "up" in c.args]
         assert up_calls == [], (
@@ -411,16 +409,15 @@ class TestUpDownScopeFiltering:
     def test_down_alpha_targets_per_env_project(self, tmp_path: Path) -> None:
         """cmd_down for alpha uses myapp-alpha, not myapp-workspace."""
         manifest = _mixed_manifest()
-        ws = _alpha_workspace(tmp_path)
         client = FakeComposeClient(compose_results=[_ok_result(0)])
-        cmd_down("alpha", manifest, ws, client)
+        cmd_down("alpha", manifest, client)
         assert client.compose_calls[0].project == "myapp-alpha"
 
     def test_down_workspace_targets_workspace_project(self, tmp_path: Path) -> None:
         """cmd_down for workspace uses myapp-workspace."""
         manifest = _mixed_manifest()
         client = FakeComposeClient(compose_results=[_ok_result(0)])
-        cmd_down("workspace", manifest, tmp_path, client)
+        cmd_down("workspace", manifest, client)
         assert client.compose_calls[0].project == "myapp-workspace"
 
 
@@ -432,7 +429,7 @@ class TestUpDownScopeFiltering:
 class TestPortOffsetScopedList:
     """WSD_PORT_* offsets are numbered over the project-only list."""
 
-    def test_workspace_service_does_not_consume_port_offset(self, tmp_path: Path) -> None:
+    def test_workspace_service_does_not_consume_port_offset(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Workspace service 'db' does not shift offsets for project services.
 
         Manifest: [backend (project), db (workspace), api (project)]
@@ -441,6 +438,7 @@ class TestPortOffsetScopedList:
             WSD_PORT_API     = port_base + 1
         db must not consume offset slot 1 (which would shift api to +2).
         """
+        monkeypatch.setenv("WINTER_PORT_BASE", "4020")
         manifest = DockerManifest(
             project_prefix="myapp",
             environment_compose_file="compose.yaml",
@@ -448,8 +446,7 @@ class TestPortOffsetScopedList:
             services=(ServiceDecl("backend"), ServiceDecl("api")),
             workspace_services=(ServiceDecl("db"),),
         )
-        ws = _alpha_workspace(tmp_path)
-        ctx = build_env_context("alpha", "myapp", ws)  # port_base=4020
+        ctx = build_env_context("alpha", "myapp")  # port_base=4020 from monkeypatched env
         scoped = manifest.services_for_scope("alpha")
         env = _build_compose_env(ctx, scoped)
 
@@ -457,8 +454,9 @@ class TestPortOffsetScopedList:
         assert env["WSD_PORT_API"] == "4021"
         assert "WSD_PORT_DB" not in env, "db is workspace-scoped; must not get per-env port"
 
-    def test_port_offset_with_multiple_workspace_services(self, tmp_path: Path) -> None:
+    def test_port_offset_with_multiple_workspace_services(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Multiple workspace services don't affect project port numbering."""
+        monkeypatch.setenv("WINTER_PORT_BASE", "4020")
         manifest = DockerManifest(
             project_prefix="myapp",
             environment_compose_file="compose.yaml",
@@ -466,8 +464,7 @@ class TestPortOffsetScopedList:
             services=(ServiceDecl("frontend"),),
             workspace_services=(ServiceDecl("db"), ServiceDecl("redis")),
         )
-        ws = _alpha_workspace(tmp_path)
-        ctx = build_env_context("alpha", "myapp", ws)
+        ctx = build_env_context("alpha", "myapp")
         scoped = manifest.services_for_scope("alpha")
         env = _build_compose_env(ctx, scoped)
 
@@ -502,18 +499,16 @@ class TestStatusScopeCorrectness:
     def test_status_alpha_queries_project_project(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         """status alpha queries compose project myapp-alpha (not myapp-workspace)."""
         manifest = _mixed_manifest(project_services=["backend"], workspace_services=["db"])
-        ws = _alpha_workspace(tmp_path)
         client = FakeComposeClient(compose_results=[_ps_result([_running_container("backend")])])
-        cmd_status(["alpha"], manifest, ws, client)
+        cmd_status(["alpha"], manifest, client)
         call = client.compose_calls[0]
         assert call.project == "myapp-alpha"
 
     def test_status_alpha_shows_only_project_services(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         """status alpha lists backend (project) but NOT db (workspace)."""
         manifest = _mixed_manifest(project_services=["backend"], workspace_services=["db"])
-        ws = _alpha_workspace(tmp_path)
         client = FakeComposeClient(compose_results=[_ps_result([_running_container("backend")])])
-        cmd_status(["alpha"], manifest, ws, client)
+        cmd_status(["alpha"], manifest, client)
         doc = json.loads(capsys.readouterr().out)
         svc_names = [s["name"] for s in doc["envs"][0]["services"]]
         assert "backend" in svc_names
@@ -525,7 +520,7 @@ class TestStatusScopeCorrectness:
         """status workspace lists db (workspace) but NOT backend (project)."""
         manifest = _mixed_manifest(project_services=["backend"], workspace_services=["db"])
         client = FakeComposeClient(compose_results=[_ps_result([_running_container("db", project="myapp-workspace")])])
-        cmd_status(["workspace"], manifest, tmp_path, client)
+        cmd_status(["workspace"], manifest, client)
         doc = json.loads(capsys.readouterr().out)
         svc_names = [s["name"] for s in doc["envs"][0]["services"]]
         assert "db" in svc_names
@@ -537,7 +532,7 @@ class TestStatusScopeCorrectness:
         """status workspace queries compose project myapp-workspace."""
         manifest = _mixed_manifest(project_services=["backend"], workspace_services=["db"])
         client = FakeComposeClient(compose_results=[_ps_result([])])
-        cmd_status(["workspace"], manifest, tmp_path, client)
+        cmd_status(["workspace"], manifest, client)
         call = client.compose_calls[0]
         assert call.project == "myapp-workspace"
 
@@ -577,7 +572,7 @@ class TestRestartScopeCorrectness:
         """cmd_restart workspace/backend emits diagnostic and returns 1."""
         manifest = _mixed_manifest(project_services=["backend"], workspace_services=["db"])
         client = FakeComposeClient()
-        rc = cmd_restart(["workspace/backend"], manifest, tmp_path, client)
+        rc = cmd_restart(["workspace/backend"], manifest, client)
         assert rc == 1
         assert client.compose_calls == []
 
@@ -587,7 +582,7 @@ class TestRestartScopeCorrectness:
         """cmd_restart alpha/db emits diagnostic and returns 1."""
         manifest = _mixed_manifest(project_services=["backend"], workspace_services=["db"])
         client = FakeComposeClient()
-        rc = cmd_restart(["alpha/db"], manifest, tmp_path, client)
+        rc = cmd_restart(["alpha/db"], manifest, client)
         assert rc == 1
         assert client.compose_calls == []
 
@@ -626,7 +621,7 @@ class TestLogsScopeCorrectness:
         manifest = _mixed_manifest(project_services=["backend"], workspace_services=["db"])
         client = FakeComposeClient()
         sink = StringIO()
-        rc = cmd_logs(["alpha/db"], manifest, tmp_path, client, sink=sink)
+        rc = cmd_logs(["alpha/db"], manifest, client, sink=sink)
         assert rc == 1
         assert client.compose_calls == []
 
@@ -635,7 +630,7 @@ class TestLogsScopeCorrectness:
         manifest = _mixed_manifest(project_services=["backend"], workspace_services=["db"])
         client = FakeComposeClient()
         sink = StringIO()
-        rc = cmd_logs(["workspace/backend"], manifest, tmp_path, client, sink=sink)
+        rc = cmd_logs(["workspace/backend"], manifest, client, sink=sink)
         assert rc == 1
         assert client.compose_calls == []
 
@@ -744,26 +739,25 @@ class TestDefaultScopeBackCompat:
         assert len(result) == 2
         assert {s.name for s in result} == {"db", "api"}
 
-    def test_no_scope_field_up_alpha_includes_all_services(self, tmp_path: Path) -> None:
+    def test_no_scope_field_up_alpha_includes_all_services(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Without scope, per-env up gets WSD_PORT_* for all services."""
+        monkeypatch.setenv("WINTER_PORT_BASE", "4020")
         manifest = _project_only_manifest(services=["db", "api"])
-        ws = _alpha_workspace(tmp_path)
-        ctx = build_env_context("alpha", "myapp", ws)
+        ctx = build_env_context("alpha", "myapp")
         scoped = manifest.services_for_scope("alpha")
         env = _build_compose_env(ctx, scoped)
 
         assert "WSD_PORT_DB" in env
         assert "WSD_PORT_API" in env
 
-    def test_no_scope_field_port_offsets_unchanged(self, tmp_path: Path) -> None:
+    def test_no_scope_field_port_offsets_unchanged(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Without scope, port offsets are 0-based over the full service list."""
+        monkeypatch.setenv("WINTER_PORT_BASE", "4020")
         manifest = _project_only_manifest(services=["db", "api", "worker"])
-        ws = _alpha_workspace(tmp_path)
-        ctx = build_env_context("alpha", "myapp", ws)
+        ctx = build_env_context("alpha", "myapp")
         scoped = manifest.services_for_scope("alpha")
         env = _build_compose_env(ctx, scoped)
 
-        # port_base=4020 from fixture
         assert env["WSD_PORT_DB"] == "4020"
         assert env["WSD_PORT_API"] == "4021"
         assert env["WSD_PORT_WORKER"] == "4022"
@@ -792,7 +786,6 @@ class TestDefaultScopeBackCompat:
     ) -> None:
         """With no scope, status alpha shows all declared services."""
         manifest = _project_only_manifest(services=["db", "api"])
-        ws = _alpha_workspace(tmp_path)
         client = FakeComposeClient(
             compose_results=[
                 _ps_result(
@@ -803,7 +796,7 @@ class TestDefaultScopeBackCompat:
                 )
             ]
         )
-        cmd_status(["alpha"], manifest, ws, client)
+        cmd_status(["alpha"], manifest, client)
         doc = json.loads(capsys.readouterr().out)
         svc_names = {s["name"] for s in doc["envs"][0]["services"]}
         assert svc_names == {"db", "api"}

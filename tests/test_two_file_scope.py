@@ -131,7 +131,7 @@ class TestUpTwoFileSelection:
                 _ps_result([_running_container("backend")]),
             ]
         )
-        rc = cmd_up("alpha", manifest, tmp_path, client, time_fn=time_fn, sleep_fn=sleep_fn, timeout=10.0)
+        rc = cmd_up("alpha", manifest, client, time_fn=time_fn, sleep_fn=sleep_fn, timeout=10.0)
         assert rc == 0
         up_call = client.compose_calls[0]
         assert up_call.compose_file == "/cfg/environment-compose.yaml"
@@ -150,7 +150,7 @@ class TestUpTwoFileSelection:
                 _ps_result([_running_container("db", project="myapp-workspace")]),
             ]
         )
-        rc = cmd_up("workspace", manifest, tmp_path, client, time_fn=time_fn, sleep_fn=sleep_fn, timeout=10.0)
+        rc = cmd_up("workspace", manifest, client, time_fn=time_fn, sleep_fn=sleep_fn, timeout=10.0)
         assert rc == 0
         up_call = client.compose_calls[0]
         assert up_call.compose_file == "/cfg/workspace-compose.yaml"
@@ -166,7 +166,7 @@ class TestUpTwoFileSelection:
                 _ps_result([_running_container("backend")]),
             ]
         )
-        cmd_up("alpha", manifest, tmp_path, client, time_fn=time_fn, sleep_fn=sleep_fn, timeout=10.0)
+        cmd_up("alpha", manifest, client, time_fn=time_fn, sleep_fn=sleep_fn, timeout=10.0)
         up_call = client.compose_calls[0]
         assert up_call.args == ["up", "-d"]
 
@@ -183,7 +183,7 @@ class TestUpTwoFileSelection:
                 _ps_result([_running_container("backend")]),
             ]
         )
-        cmd_up("alpha", manifest, tmp_path, client, time_fn=time_fn, sleep_fn=sleep_fn, timeout=10.0)
+        cmd_up("alpha", manifest, client, time_fn=time_fn, sleep_fn=sleep_fn, timeout=10.0)
         ps_calls = [c for c in client.compose_calls if "ps" in c.args]
         assert len(ps_calls) == 1
         assert ps_calls[0].compose_file == "/cfg/environment-compose.yaml"
@@ -202,7 +202,7 @@ class TestDownTwoFileSelection:
             ws_file="/cfg/workspace-compose.yaml",
         )
         client = FakeComposeClient(compose_results=[_ok_result(0)])
-        cmd_down("alpha", manifest, tmp_path, client)
+        cmd_down("alpha", manifest, client)
         call = client.compose_calls[0]
         assert call.compose_file == "/cfg/environment-compose.yaml"
         assert call.project == "myapp-alpha"
@@ -214,7 +214,7 @@ class TestDownTwoFileSelection:
             ws_file="/cfg/workspace-compose.yaml",
         )
         client = FakeComposeClient(compose_results=[_ok_result(0)])
-        cmd_down("workspace", manifest, tmp_path, client)
+        cmd_down("workspace", manifest, client)
         call = client.compose_calls[0]
         assert call.compose_file == "/cfg/workspace-compose.yaml"
         assert call.project == "myapp-workspace"
@@ -228,7 +228,7 @@ class TestDownTwoFileSelection:
             services=(ServiceDecl("backend"),),
         )
         client = FakeComposeClient()
-        rc = cmd_down("alpha", manifest, tmp_path, client)
+        rc = cmd_down("alpha", manifest, client)
         assert rc != 0
         assert client.compose_calls == []
 
@@ -241,7 +241,7 @@ class TestDownTwoFileSelection:
             workspace_services=(ServiceDecl("db"),),
         )
         client = FakeComposeClient()
-        rc = cmd_down("workspace", manifest, tmp_path, client)
+        rc = cmd_down("workspace", manifest, client)
         assert rc != 0
         assert client.compose_calls == []
 
@@ -259,7 +259,7 @@ class TestRestartTwoFileSelection:
             ws_file="/cfg/workspace-compose.yaml",
         )
         client = FakeComposeClient(compose_default=_ok_result(0))
-        cmd_restart(["alpha/backend"], manifest, tmp_path, client)
+        cmd_restart(["alpha/backend"], manifest, client)
         assert len(client.compose_calls) == 1
         call = client.compose_calls[0]
         assert call.compose_file == "/cfg/environment-compose.yaml"
@@ -272,7 +272,7 @@ class TestRestartTwoFileSelection:
             ws_file="/cfg/workspace-compose.yaml",
         )
         client = FakeComposeClient(compose_default=_ok_result(0))
-        cmd_restart(["workspace/db"], manifest, tmp_path, client)
+        cmd_restart(["workspace/db"], manifest, client)
         assert len(client.compose_calls) == 1
         call = client.compose_calls[0]
         assert call.compose_file == "/cfg/workspace-compose.yaml"
@@ -287,7 +287,7 @@ class TestRestartTwoFileSelection:
             services=(ServiceDecl("backend"),),
         )
         client = FakeComposeClient()
-        rc = cmd_restart(["alpha/backend"], manifest, tmp_path, client)
+        rc = cmd_restart(["alpha/backend"], manifest, client)
         assert rc != 0
         err = capsys.readouterr().err
         assert "manifest is missing" in err
@@ -307,7 +307,7 @@ class TestLogsTwoFileSelection:
         )
         client = FakeComposeClient(compose_default=_ok_result())
         sink = StringIO()
-        cmd_logs(["alpha/backend"], manifest, tmp_path, client, sink=sink)
+        cmd_logs(["alpha/backend"], manifest, client, sink=sink)
         assert len(client.compose_calls) == 1
         call = client.compose_calls[0]
         assert call.compose_file == "/cfg/environment-compose.yaml"
@@ -321,7 +321,7 @@ class TestLogsTwoFileSelection:
         )
         client = FakeComposeClient(compose_default=_ok_result())
         sink = StringIO()
-        cmd_logs(["workspace/db"], manifest, tmp_path, client, sink=sink)
+        cmd_logs(["workspace/db"], manifest, client, sink=sink)
         assert len(client.compose_calls) == 1
         call = client.compose_calls[0]
         assert call.compose_file == "/cfg/workspace-compose.yaml"
@@ -337,7 +337,7 @@ class TestLogsTwoFileSelection:
         )
         client = FakeComposeClient()
         sink = StringIO()
-        rc = cmd_logs(["alpha/backend"], manifest, tmp_path, client, sink=sink)
+        rc = cmd_logs(["alpha/backend"], manifest, client, sink=sink)
         assert rc != 0
         err = capsys.readouterr().err
         assert "manifest is missing" in err
@@ -356,7 +356,7 @@ class TestStatusTwoFileSelection:
             ws_file="/cfg/workspace-compose.yaml",
         )
         client = FakeComposeClient(compose_results=[_ps_result([_running_container("backend")])])
-        cmd_status(["alpha"], manifest, tmp_path, client)
+        cmd_status(["alpha"], manifest, client)
         call = client.compose_calls[0]
         assert call.compose_file == "/cfg/environment-compose.yaml"
 
@@ -367,7 +367,7 @@ class TestStatusTwoFileSelection:
             ws_file="/cfg/workspace-compose.yaml",
         )
         client = FakeComposeClient(compose_results=[_ps_result([_running_container("db", project="myapp-workspace")])])
-        cmd_status(["workspace"], manifest, tmp_path, client)
+        cmd_status(["workspace"], manifest, client)
         call = client.compose_calls[0]
         assert call.compose_file == "/cfg/workspace-compose.yaml"
 

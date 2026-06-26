@@ -46,11 +46,10 @@ from __future__ import annotations
 import subprocess
 import sys
 from collections.abc import Callable
-from pathlib import Path
 
 from docker_orchestrator.compose_client import IComposeClient
 from docker_orchestrator.compose_ps import extract_health, parse_compose_ps_output
-from docker_orchestrator.env_context import EnvContext, build_env_context, resolve_env_file
+from docker_orchestrator.env_context import EnvContext, build_env_context
 from docker_orchestrator.manifest import DockerManifest, ServiceDecl
 
 # ---------------------------------------------------------------------------
@@ -121,7 +120,6 @@ def _poll_readiness(
     compose_file: str,
     client: IComposeClient,
     compose_env: dict[str, str],
-    source_env_file: str | None = None,
 ) -> tuple[bool, str]:
     """Poll ``compose ps --all`` once and return (all_ready, unready_service_name).
 
@@ -139,7 +137,6 @@ def _poll_readiness(
         ["ps", "--all", "--format", "json"],
         capture_output=True,
         env=compose_env,
-        source_env_file=source_env_file,
     )
     containers = parse_compose_ps_output(result.stdout or "")
     if not containers:
@@ -165,7 +162,6 @@ def _poll_readiness(
 def cmd_down(
     env: str,
     manifest: DockerManifest,
-    workspace_root: Path,
     client: IComposeClient,
 ) -> int:
     """Implement ``down <env>``.
@@ -183,10 +179,9 @@ def cmd_down(
         )
         return 1
 
-    ctx: EnvContext = build_env_context(env, manifest.project_prefix, workspace_root)
+    ctx: EnvContext = build_env_context(env, manifest.project_prefix)
     scoped_services: tuple[ServiceDecl, ...] = manifest.services_for_scope(env)
     compose_env = _build_compose_env(ctx, scoped_services)
-    source_env_file = resolve_env_file(workspace_root, env)
 
     print(
         f"docker-orchestrator: down: stopping {ctx.compose_project_name}",
@@ -206,7 +201,6 @@ def cmd_down(
             compose_file,
             ["down"],
             env=compose_env,
-            source_env_file=source_env_file,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         print(f"docker-orchestrator: down: compose error: {exc}", file=sys.stderr)
@@ -223,7 +217,6 @@ def cmd_down(
 def cmd_up(
     env: str,
     manifest: DockerManifest,
-    workspace_root: Path,
     client: IComposeClient,
     *,
     timeout: float = 120.0,
@@ -241,7 +234,6 @@ def cmd_up(
     Args:
         env: The feature environment name (e.g. ``"alpha"``).
         manifest: The parsed extension manifest.
-        workspace_root: Absolute path to the workspace root.
         client: Injectable ``ComposeClient`` (real or fake).
         timeout: Seconds to wait for all containers to become ready.
         poll_interval: Seconds between readiness polls.
@@ -266,10 +258,9 @@ def cmd_up(
         )
         return 1
 
-    ctx: EnvContext = build_env_context(env, manifest.project_prefix, workspace_root)
+    ctx: EnvContext = build_env_context(env, manifest.project_prefix)
     scoped_services: tuple[ServiceDecl, ...] = manifest.services_for_scope(env)
     compose_env = _build_compose_env(ctx, scoped_services)
-    source_env_file = resolve_env_file(workspace_root, env)
 
     # Guard: if no services belong to this scope, skip the compose call entirely.
     # Each scope-pure compose file contains only its scope's services, so
@@ -297,7 +288,6 @@ def cmd_up(
             compose_file,
             ["up", "-d"],
             env=compose_env,
-            source_env_file=source_env_file,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         print(f"docker-orchestrator: up: compose error: {exc}", file=sys.stderr)
@@ -324,7 +314,6 @@ def cmd_up(
             compose_file,
             client,
             compose_env,
-            source_env_file=source_env_file,
         )
         if ready:
             print(

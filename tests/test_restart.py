@@ -115,7 +115,7 @@ def test_cmd_restart_issues_correct_compose_call(tmp_path: Path) -> None:
     manifest = _make_manifest(services=["db"])
     client = FakeComposeClient(compose_default=_ok_result(0))
 
-    rc = cmd_restart(["alpha/db"], manifest, tmp_path, client)
+    rc = cmd_restart(["alpha/db"], manifest, client)
 
     assert rc == 0
     assert len(client.compose_calls) == 1
@@ -130,7 +130,7 @@ def test_cmd_restart_uses_correct_env_prefix(tmp_path: Path) -> None:
     manifest = _make_manifest(prefix="mypfx", services=["api"])
     client = FakeComposeClient(compose_default=_ok_result(0))
 
-    cmd_restart(["beta/api"], manifest, tmp_path, client)
+    cmd_restart(["beta/api"], manifest, client)
 
     assert client.compose_calls[0].project == "mypfx-beta"
 
@@ -148,7 +148,7 @@ def test_cmd_restart_worst_exit_aggregation(tmp_path: Path) -> None:
         compose_results=[_ok_result(0), _ok_result(1), _ok_result(2)],
     )
 
-    rc = cmd_restart(["alpha/*"], manifest, tmp_path, client)
+    rc = cmd_restart(["alpha/*"], manifest, client)
 
     assert rc == 2
     assert len(client.compose_calls) == 3
@@ -160,7 +160,7 @@ def test_cmd_restart_all_fail_returns_worst(tmp_path: Path) -> None:
         compose_results=[_ok_result(1), _ok_result(0)],
     )
 
-    rc = cmd_restart(["alpha/*"], manifest, tmp_path, client)
+    rc = cmd_restart(["alpha/*"], manifest, client)
 
     assert rc == 1
 
@@ -174,7 +174,7 @@ def test_cmd_restart_no_match_returns_1(tmp_path: Path, capsys: pytest.CaptureFi
     manifest = _make_manifest(services=["db"])
     client = FakeComposeClient()
 
-    rc = cmd_restart(["alpha/notexist"], manifest, tmp_path, client)
+    rc = cmd_restart(["alpha/notexist"], manifest, client)
 
     assert rc == 1
     assert len(client.compose_calls) == 0
@@ -186,7 +186,7 @@ def test_cmd_restart_wildcard_env_no_concrete_returns_1(tmp_path: Path, capsys: 
     manifest = _make_manifest(services=["db"])
     client = FakeComposeClient()
 
-    rc = cmd_restart(["*/db"], manifest, tmp_path, client)
+    rc = cmd_restart(["*/db"], manifest, client)
 
     assert rc == 1
     err = capsys.readouterr().err
@@ -207,7 +207,7 @@ def test_cmd_restart_missing_prefix_returns_1(tmp_path: Path, capsys: pytest.Cap
     )
     client = FakeComposeClient()
 
-    rc = cmd_restart(["alpha/db"], manifest, tmp_path, client)
+    rc = cmd_restart(["alpha/db"], manifest, client)
 
     assert rc == 1
     assert "manifest is missing" in capsys.readouterr().err
@@ -222,7 +222,7 @@ def test_cmd_restart_missing_compose_file_returns_1(tmp_path: Path, capsys: pyte
     )
     client = FakeComposeClient()
 
-    rc = cmd_restart(["alpha/db"], manifest, tmp_path, client)
+    rc = cmd_restart(["alpha/db"], manifest, client)
 
     assert rc == 1
     assert "manifest is missing" in capsys.readouterr().err
@@ -237,7 +237,7 @@ def test_cmd_restart_empty_patterns_returns_1(tmp_path: Path, capsys: pytest.Cap
     manifest = _make_manifest(services=["db"])
     client = FakeComposeClient()
 
-    rc = cmd_restart([], manifest, tmp_path, client)
+    rc = cmd_restart([], manifest, client)
 
     assert rc == 1
     assert "at least one" in capsys.readouterr().err
@@ -263,8 +263,8 @@ def test_cli_restart_dispatches_correctly(tmp_path: Path, capsys: pytest.Capture
 
         original = restart_mod.cmd_restart
 
-        def patched_restart(patterns, manifest, workspace_root, client):
-            return original(patterns, manifest, workspace_root, fake_client)
+        def patched_restart(patterns, manifest, client):
+            return original(patterns, manifest, fake_client)
 
         with patch.object(restart_mod, "cmd_restart", patched_restart):
             rc = cli_main(["restart", "alpha/db"])
@@ -296,7 +296,7 @@ def test_cmd_restart_glob_prefix_matches(tmp_path: Path) -> None:
     manifest = _make_manifest(services=["db", "worker"])
     client = FakeComposeClient(compose_default=_ok_result(0))
 
-    rc = cmd_restart(["alpha/work*"], manifest, tmp_path, client)
+    rc = cmd_restart(["alpha/work*"], manifest, client)
 
     assert rc == 0
     assert len(client.compose_calls) == 1

@@ -38,9 +38,9 @@ _ENVIRONMENT_COMPOSE_YAML = """\
 # config.toml (workspace-scoped entries are excluded).  Two envs never collide.
 #
 # You can reproduce what winter does by hand:
+#   source <(winter env alpha)
 #   docker compose -p myapp-alpha \\
 #       -f environment-compose.yaml \\
-#       --env-file alpha/.winter.env \\
 #       up -d
 
 services:
@@ -62,16 +62,16 @@ _WORKSPACE_COMPOSE_YAML = """\
 # Workspace-scoped services get no WSD_PORT_* variables (that per-env auto-
 # derivation needs a per-env WINTER_PORT_BASE, which the workspace scope has not).
 # Use fixed host ports (or omit port publishing) instead, or reference
-# ${WINTER_WORKSPACE_PORT_BASE} from the sourced .winter.workspace.env.
+# ${WINTER_WORKSPACE_PORT_BASE} (injected by core for the workspace scope).
 #
 # Named volumes declared here persist across `docker compose down` and survive
 # `winter ws destroy` (the destroy hook runs compose down but does not remove
 # volumes).
 #
 # You can reproduce what winter does by hand:
+#   source <(winter env workspace)
 #   docker compose -p myapp-workspace \\
 #       -f workspace-compose.yaml \\
-#       --env-file .winter.workspace.env \\
 #       up -d
 
 services:

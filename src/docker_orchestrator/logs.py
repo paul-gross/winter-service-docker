@@ -48,11 +48,10 @@ import json
 import re
 import subprocess
 import sys
-from pathlib import Path
 from typing import IO
 
 from docker_orchestrator.compose_client import IComposeClient
-from docker_orchestrator.env_context import build_env_context, resolve_env_file
+from docker_orchestrator.env_context import build_env_context
 from docker_orchestrator.manifest import DockerManifest
 from docker_orchestrator.patterns import envs_from_patterns, service_matches_any_pattern
 
@@ -247,7 +246,6 @@ def _collect_log_targets(
 def cmd_logs(
     patterns: list[str],
     manifest: DockerManifest,
-    workspace_root: Path,
     client: IComposeClient,
     *,
     sink: IO[str] | None = None,
@@ -265,7 +263,6 @@ def cmd_logs(
     Args:
         patterns: Zero or more ``<env>/<service>`` glob patterns.
         manifest: The parsed extension manifest.
-        workspace_root: Absolute path to the workspace root.
         client: Injectable ``ComposeClient`` (real or fake).
         sink: Output stream for NDJSON lines; defaults to ``sys.stdout``.
         follow: Stream live output after the backlog.
@@ -309,8 +306,7 @@ def cmd_logs(
             )
             worst = max(worst, 1)
             continue
-        ctx = build_env_context(env, manifest.project_prefix, workspace_root)
-        source_env_file = resolve_env_file(workspace_root, env)
+        ctx = build_env_context(env, manifest.project_prefix)
         log_args = _build_log_args(
             svc,
             follow=follow,
@@ -326,7 +322,6 @@ def cmd_logs(
                     ctx.compose_project_name,
                     compose_file,
                     log_args,
-                    source_env_file=source_env_file,
                 )
                 try:
                     _stream_ndjson(line_iter, env, svc, out)
@@ -347,7 +342,6 @@ def cmd_logs(
                     compose_file,
                     log_args,
                     capture_output=True,
-                    source_env_file=source_env_file,
                 )
                 code = result.returncode
                 raw_lines = (result.stdout or "").splitlines(keepends=True)

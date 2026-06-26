@@ -7,15 +7,15 @@ Each workspace config declares **two compose files** in `config.toml`:
 - `environment_compose_file` — per-env (project-scoped) services only; run under `<project_prefix>-<env>`.
 - `workspace_compose_file` — workspace-scoped singleton services only; run under `<project_prefix>-workspace`.
 
-Each file is independently runnable by hand. The orchestrator sources the winter env file in a shell before invoking compose — see `winter-service-docker:/ai/provider-contract.md#env-file-sourcing` for the exact mechanism and precedence rules. To reproduce:
+Each file is independently runnable by hand. Winter-cli core injects `WINTER_PORT_BASE` and all `[env.vars]` entries into the provider subprocess environment before `up`, `down`, and `status` invocations — see `winter-service-docker:/ai/provider-contract.md#environment-variable-injection` for the full contract. To reproduce manually, source `winter env <scope>` first:
 
 ```bash
 # Feature env (e.g. alpha):
-set -a; . alpha/.winter.env; set +a
+source <(winter env alpha)
 docker compose -p myapp-alpha -f environment-compose.yaml up -d
 
 # Workspace singletons:
-set -a; . .winter.workspace.env; set +a
+source <(winter env workspace)
 docker compose -p myapp-workspace -f workspace-compose.yaml up -d
 ```
 
@@ -27,14 +27,14 @@ Every compose invocation sets `COMPOSE_PROJECT_NAME=<project_prefix>-<env>` (e.g
 
 ## WSD_PORT_* port-substitution convention
 
-Published host ports in `environment-compose.yaml` should use `${WSD_PORT_<NAME>}` placeholders (where `<NAME>` is the upper-cased service name). `winter-service-docker` derives per-env ports from `WINTER_PORT_BASE` (read from `<workspace>/<env>/.winter.env`) so host ports are unique across envs.
+Published host ports in `environment-compose.yaml` should use `${WSD_PORT_<NAME>}` placeholders (where `<NAME>` is the upper-cased service name). `winter-service-docker` derives per-env ports from `WINTER_PORT_BASE` (injected into the provider subprocess environment by winter-cli core) so host ports are unique across envs.
 
 The offset is the 0-based declaration order among **project-scoped** `[[service]]` entries in `config.toml` — i.e. `WSD_PORT_<NAME> = WINTER_PORT_BASE + <position>` (workspace-scoped entries are excluded from port assignment because they have no `WINTER_PORT_BASE`). **Reordering project entries reassigns ports.** Example: with `WINTER_PORT_BASE=4060` (gamma env), the first declared project service gets `4060`, the second `4061`. Alpha (port_base=4020) and beta (4040) get different host ports automatically.
 
-## Env-file sourcing
+## Environment variable injection
 
-`WSD_PORT_*` is not the only way to feed ports into `environment-compose.yaml`. For `up`, `down`, `restart`, and `logs`, the orchestrator **sources** the scope's winter env file in a shell before each compose invocation, so the file can carry shell arithmetic and the compose file can reference any variable it defines — `${WINTER_PORT_BASE}`, a project-seeded `${WTS_DB_PORT}`, `${DATABASE_URL}`, etc.
+Winter-cli core injects the full env map into the provider subprocess for `up`, `down`, and `status`. The injected set includes `WINTER_PORT_BASE`, `WINTER_WORKSPACE_PORT_BASE`, and any custom `[env.vars]` entries from the workspace `config.toml`. For `restart` and `logs`, core injects only the four base extension vars; these actions operate on already-provisioned containers and do not need `WINTER_PORT_BASE`. The compose file can reference any of these directly — `${WINTER_PORT_BASE}`, `${DATABASE_URL}`, etc. — without shell arithmetic or file sourcing. Declare workspace-level variables in `[env.vars]` so they are available to all providers for `up`/`down`/`status`.
 
-For **`status`**, env-file sourcing is the responsibility of winter-cli core (not this provider). Core injects `WINTER_PORT_BASE` and all sourced env-file vars into the provider subprocess before calling it; the provider reads them from the process environment directly. See `winter-service-docker:/ai/provider-contract.md#env-file-sourcing` for the full contract (which file per scope, per-action sourcing ownership, sourcing-vs-parsing, and precedence).
+See `winter-service-docker:/ai/provider-contract.md#environment-variable-injection` for the full contract.
 
 See `winter-service-docker:/workflow/config.toml.example` for the annotated schema.

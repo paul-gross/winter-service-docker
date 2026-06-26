@@ -98,12 +98,8 @@ def _cmd_status(argv_rest: list[str], workspace_root: Path | None) -> int:
             file=sys.stderr,
         )
     manifest = load_manifest(config_dir)
-
-    # workspace_root defaults to cwd when WINTER_WORKSPACE_DIR is unset
-    ws_root = workspace_root if workspace_root is not None else Path.cwd()
-
     client = ComposeClient()
-    return cmd_status(patterns=argv_rest, manifest=manifest, workspace_root=ws_root, client=client)
+    return cmd_status(patterns=argv_rest, manifest=manifest, client=client)
 
 
 def _cmd_up(argv_rest: list[str], workspace_root: Path | None) -> int:
@@ -119,7 +115,6 @@ def _cmd_up(argv_rest: list[str], workspace_root: Path | None) -> int:
     env = argv_rest[0]
     config_dir = resolve_config_dir(workspace_root)
     manifest = load_manifest(config_dir)
-    ws_root = workspace_root if workspace_root is not None else Path.cwd()
     client = ComposeClient()
     # Allow the timeout and poll interval to be overridden for testing / fast CI.
     _timeout = float(os.environ.get("WSD_UP_TIMEOUT", "120"))
@@ -127,7 +122,6 @@ def _cmd_up(argv_rest: list[str], workspace_root: Path | None) -> int:
     return cmd_up(
         env=env,
         manifest=manifest,
-        workspace_root=ws_root,
         client=client,
         timeout=_timeout,
         poll_interval=_poll_interval,
@@ -147,9 +141,8 @@ def _cmd_down(argv_rest: list[str], workspace_root: Path | None) -> int:
     env = argv_rest[0]
     config_dir = resolve_config_dir(workspace_root)
     manifest = load_manifest(config_dir)
-    ws_root = workspace_root if workspace_root is not None else Path.cwd()
     client = ComposeClient()
-    return cmd_down(env=env, manifest=manifest, workspace_root=ws_root, client=client)
+    return cmd_down(env=env, manifest=manifest, client=client)
 
 
 def _cmd_restart(argv_rest: list[str], workspace_root: Path | None) -> int:
@@ -164,9 +157,8 @@ def _cmd_restart(argv_rest: list[str], workspace_root: Path | None) -> int:
 
     config_dir = resolve_config_dir(workspace_root)
     manifest = load_manifest(config_dir)
-    ws_root = workspace_root if workspace_root is not None else Path.cwd()
     client = ComposeClient()
-    return cmd_restart(patterns=argv_rest, manifest=manifest, workspace_root=ws_root, client=client)
+    return cmd_restart(patterns=argv_rest, manifest=manifest, client=client)
 
 
 def _cmd_logs(argv_rest: list[str], workspace_root: Path | None) -> int:
@@ -179,12 +171,10 @@ def _cmd_logs(argv_rest: list[str], workspace_root: Path | None) -> int:
 
     config_dir = resolve_config_dir(workspace_root)
     manifest = load_manifest(config_dir)
-    ws_root = workspace_root if workspace_root is not None else Path.cwd()
     client = ComposeClient()
     return cmd_logs(
         patterns=patterns,
         manifest=manifest,
-        workspace_root=ws_root,
         client=client,
         follow=follow,
         tail=tail,

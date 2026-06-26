@@ -89,37 +89,33 @@ class TestEnvContextWorkspace:
         """Different prefix → <prefix>-workspace."""
         assert compose_project_name("mp", "workspace") == "mp-workspace"
 
-    def test_build_env_context_workspace_project_name(self, tmp_path: Path) -> None:
+    def test_build_env_context_workspace_project_name(self) -> None:
         """build_env_context for workspace → compose_project_name = <prefix>-workspace."""
-        ctx = build_env_context("workspace", "myapp", tmp_path)
+        ctx = build_env_context("workspace", "myapp")
         assert ctx.compose_project_name == "myapp-workspace"
 
-    def test_build_env_context_workspace_env_field(self, tmp_path: Path) -> None:
+    def test_build_env_context_workspace_env_field(self) -> None:
         """build_env_context for workspace → env = "workspace"."""
-        ctx = build_env_context("workspace", "myapp", tmp_path)
+        ctx = build_env_context("workspace", "myapp")
         assert ctx.env == "workspace"
 
-    def test_build_env_context_workspace_port_base_none(self, tmp_path: Path) -> None:
-        """Port base is None for workspace scope (no .winter.env file)."""
-        ctx = build_env_context("workspace", "myapp", tmp_path)
+    def test_build_env_context_workspace_port_base_none(self) -> None:
+        """Port base is None when WINTER_PORT_BASE is absent from the process environment."""
+        ctx = build_env_context("workspace", "myapp")
         assert ctx.port_base is None
 
-    def test_read_port_base_workspace_none_no_crash(self, tmp_path: Path) -> None:
-        """read_port_base returns None for workspace scope without crashing."""
-        result = read_port_base(tmp_path, "workspace")
+    def test_read_port_base_workspace_none_no_crash(self) -> None:
+        """read_port_base returns None when WINTER_PORT_BASE is absent from os.environ."""
+        result = read_port_base()
         assert result is None
 
-    def test_read_port_base_workspace_none_even_with_env_file(self, tmp_path: Path) -> None:
-        """read_port_base returns None for workspace even if workspace/.winter.env exists.
+    def test_read_port_base_returns_none_when_env_var_absent(self) -> None:
+        """read_port_base returns None when WINTER_PORT_BASE is not in the process environment.
 
-        The workspace scope short-circuits before reading any file — the contract
-        states the workspace scope has no per-env .winter.env.
+        Winter-cli core injects WINTER_PORT_BASE via EnvProvisionerService; when it
+        is absent (e.g. manual invocation without sourcing), read_port_base returns None.
         """
-        ws_env_file = tmp_path / "workspace" / ".winter.env"
-        ws_env_file.parent.mkdir(parents=True)
-        ws_env_file.write_text("WINTER_PORT_BASE=9999\n", encoding="utf-8")
-        result = read_port_base(tmp_path, "workspace")
-        # workspace scope always returns None regardless of file presence
+        result = read_port_base()
         assert result is None
 
 
@@ -182,7 +178,7 @@ class TestDownWorkspace:
         """cmd_down for workspace calls compose with args=['down']."""
         client = FakeComposeClient(compose_results=[_ok_result(0)])
         manifest = _make_manifest(prefix="myapp")
-        rc = cmd_down("workspace", manifest, tmp_path, client)
+        rc = cmd_down("workspace", manifest, client)
         assert rc == 0
         assert len(client.compose_calls) == 1
         call = client.compose_calls[0]
@@ -192,7 +188,7 @@ class TestDownWorkspace:
         """cmd_down for workspace uses compose_project_name=<prefix>-workspace."""
         client = FakeComposeClient(compose_results=[_ok_result(0)])
         manifest = _make_manifest(prefix="myapp")
-        cmd_down("workspace", manifest, tmp_path, client)
+        cmd_down("workspace", manifest, client)
         call = client.compose_calls[0]
         assert call.project == "myapp-workspace"
 
@@ -206,7 +202,7 @@ class TestDownWorkspace:
         """
         client = FakeComposeClient(compose_results=[_ok_result(0)])
         manifest = _make_manifest(prefix="myapp")
-        cmd_down("workspace", manifest, tmp_path, client)
+        cmd_down("workspace", manifest, client)
         call = client.compose_calls[0]
         # Assert neither -v nor --volumes appears in the args
         assert "-v" not in call.args
@@ -220,7 +216,7 @@ class TestDownWorkspace:
         runner = FakeRunner(default_result=subprocess.CompletedProcess([], 0, stdout="", stderr=""))
         client = ComposeClient(runner=runner)
         manifest = _make_manifest(prefix="myapp")
-        cmd_down("workspace", manifest, tmp_path, client)
+        cmd_down("workspace", manifest, client)
         assert runner.calls, "No subprocess call was recorded"
         full_argv = runner.calls[0].args
         assert "-v" not in full_argv
@@ -228,13 +224,9 @@ class TestDownWorkspace:
 
     def test_down_regular_env_also_no_volumes(self, tmp_path: Path) -> None:
         """Per-env down also never passes -v / --volumes."""
-        # Write alpha .winter.env so port_base can be read
-        alpha_dir = tmp_path / "alpha"
-        alpha_dir.mkdir()
-        (alpha_dir / ".winter.env").write_text("WINTER_PORT_BASE=4020\n", encoding="utf-8")
         client = FakeComposeClient(compose_results=[_ok_result(0)])
         manifest = _make_manifest(prefix="myapp")
-        cmd_down("alpha", manifest, tmp_path, client)
+        cmd_down("alpha", manifest, client)
         call = client.compose_calls[0]
         assert "-v" not in call.args
         assert "--volumes" not in call.args
@@ -272,7 +264,7 @@ class TestUpWorkspace:
         )
         manifest = _make_manifest(prefix="myapp", workspace_services=["db"])
         time_fn, sleep_fn = self._clock()
-        rc = cmd_up("workspace", manifest, tmp_path, client, time_fn=time_fn, sleep_fn=sleep_fn, timeout=10.0)
+        rc = cmd_up("workspace", manifest, client, time_fn=time_fn, sleep_fn=sleep_fn, timeout=10.0)
         assert rc == 0
         up_call = client.compose_calls[0]
         assert up_call.project == "myapp-workspace"
@@ -287,7 +279,7 @@ class TestUpWorkspace:
         )
         manifest = _make_manifest(prefix="myapp", workspace_services=["db"])
         time_fn, sleep_fn = self._clock()
-        cmd_up("workspace", manifest, tmp_path, client, time_fn=time_fn, sleep_fn=sleep_fn, timeout=10.0)
+        cmd_up("workspace", manifest, client, time_fn=time_fn, sleep_fn=sleep_fn, timeout=10.0)
         up_call = client.compose_calls[0]
         env = up_call.env or {}
         wsd_port_keys = [k for k in env if k.startswith("WSD_PORT_")]
@@ -303,15 +295,15 @@ class TestUpWorkspace:
         )
         manifest = _make_manifest(prefix="myapp", workspace_services=["db"])
         time_fn, sleep_fn = self._clock()
-        cmd_up("workspace", manifest, tmp_path, client, time_fn=time_fn, sleep_fn=sleep_fn, timeout=10.0)
+        cmd_up("workspace", manifest, client, time_fn=time_fn, sleep_fn=sleep_fn, timeout=10.0)
         up_call = client.compose_calls[0]
         env = up_call.env or {}
         assert env.get("COMPOSE_PROJECT_NAME") == "myapp-workspace"
 
-    def test_build_compose_env_workspace_no_port_vars(self, tmp_path: Path) -> None:
+    def test_build_compose_env_workspace_no_port_vars(self) -> None:
         """_build_compose_env with workspace context omits WSD_PORT_* vars."""
 
-        ctx = build_env_context("workspace", "myapp", tmp_path)
+        ctx = build_env_context("workspace", "myapp")
         manifest = _make_manifest(services=["db", "api"])
         env = _build_compose_env(ctx, manifest.services_for_scope("workspace"))
         assert env["COMPOSE_PROJECT_NAME"] == "myapp-workspace"
@@ -337,7 +329,7 @@ class TestStatusWorkspace:
         old_stdout = sys.stdout
         sys.stdout = out
         try:
-            rc = cmd_status(["workspace"], manifest, tmp_path, client)
+            rc = cmd_status(["workspace"], manifest, client)
         finally:
             sys.stdout = old_stdout
 
@@ -358,7 +350,7 @@ class TestStatusWorkspace:
         old_stdout = sys.stdout
         sys.stdout = out
         try:
-            cmd_status(["workspace"], manifest, tmp_path, client)
+            cmd_status(["workspace"], manifest, client)
         finally:
             sys.stdout = old_stdout
 
@@ -374,7 +366,7 @@ class TestStatusWorkspace:
         old_stdout = sys.stdout
         sys.stdout = out
         try:
-            cmd_status(["workspace"], manifest, tmp_path, client)
+            cmd_status(["workspace"], manifest, client)
         finally:
             sys.stdout = old_stdout
 
@@ -391,7 +383,7 @@ class TestStatusWorkspace:
         old_stdout = sys.stdout
         sys.stdout = out
         try:
-            cmd_status(["workspace"], manifest, tmp_path, client)
+            cmd_status(["workspace"], manifest, client)
         finally:
             sys.stdout = old_stdout
 
@@ -414,7 +406,7 @@ class TestRestartWorkspace:
         """cmd_restart workspace/db uses project <prefix>-workspace."""
         client = FakeComposeClient(compose_results=[_ok_result(0)])
         manifest = _make_manifest(prefix="myapp", workspace_services=["db"])
-        rc = cmd_restart(["workspace/db"], manifest, tmp_path, client)
+        rc = cmd_restart(["workspace/db"], manifest, client)
         assert rc == 0
         assert len(client.compose_calls) == 1
         call = client.compose_calls[0]
@@ -424,7 +416,7 @@ class TestRestartWorkspace:
         """cmd_restart workspace/db issues ['restart', 'db'] args."""
         client = FakeComposeClient(compose_results=[_ok_result(0)])
         manifest = _make_manifest(prefix="myapp", workspace_services=["db"])
-        cmd_restart(["workspace/db"], manifest, tmp_path, client)
+        cmd_restart(["workspace/db"], manifest, client)
         call = client.compose_calls[0]
         assert call.args == ["restart", "db"]
 
@@ -432,7 +424,7 @@ class TestRestartWorkspace:
         """cmd_restart workspace/* restarts all declared services in workspace."""
         client = FakeComposeClient(compose_results=[_ok_result(0), _ok_result(0)])
         manifest = _make_manifest(prefix="myapp", workspace_services=["db", "api"])
-        rc = cmd_restart(["workspace/*"], manifest, tmp_path, client)
+        rc = cmd_restart(["workspace/*"], manifest, client)
         assert rc == 0
         assert len(client.compose_calls) == 2
         projects = {c.project for c in client.compose_calls}
@@ -460,7 +452,7 @@ class TestLogsWorkspace:
         client = FakeComposeClient(compose_results=[subprocess.CompletedProcess([], 0, stdout="", stderr="")])
         manifest = _make_manifest(prefix="myapp", workspace_services=["db"])
         sink = StringIO()
-        cmd_logs(["workspace/db"], manifest, tmp_path, client, sink=sink)
+        cmd_logs(["workspace/db"], manifest, client, sink=sink)
         assert len(client.compose_calls) == 1
         assert client.compose_calls[0].project == "myapp-workspace"
 
@@ -470,7 +462,7 @@ class TestLogsWorkspace:
         client = FakeComposeClient(compose_results=[subprocess.CompletedProcess([], 0, stdout=log_line, stderr="")])
         manifest = _make_manifest(prefix="myapp", workspace_services=["db"])
         sink = StringIO()
-        cmd_logs(["workspace/db"], manifest, tmp_path, client, sink=sink)
+        cmd_logs(["workspace/db"], manifest, client, sink=sink)
         lines = [ln for ln in sink.getvalue().splitlines() if ln.strip()]
         assert lines, "Expected at least one NDJSON line"
         event = json.loads(lines[0])
@@ -487,7 +479,7 @@ class TestLogsWorkspace:
         )
         manifest = _make_manifest(prefix="myapp", workspace_services=["db", "api"])
         sink = StringIO()
-        rc = cmd_logs(["workspace"], manifest, tmp_path, client, sink=sink)
+        rc = cmd_logs(["workspace"], manifest, client, sink=sink)
         assert rc == 0
         # Both db and api should be queried
         assert len(client.compose_calls) == 2
@@ -507,7 +499,7 @@ class TestWorkspacePersistence:
         """down workspace compose env has no WSD_PORT_* keys."""
         client = FakeComposeClient(compose_results=[_ok_result(0)])
         manifest = _make_manifest(prefix="myapp", services=["db"])
-        cmd_down("workspace", manifest, tmp_path, client)
+        cmd_down("workspace", manifest, client)
         call = client.compose_calls[0]
         env = call.env or {}
         wsd_keys = [k for k in env if k.startswith("WSD_PORT_")]
@@ -522,7 +514,7 @@ class TestWorkspacePersistence:
         """
         client = FakeComposeClient(compose_results=[_ok_result(0)])
         manifest = _make_manifest(prefix="myapp", services=["db"])
-        cmd_down("workspace", manifest, tmp_path, client)
+        cmd_down("workspace", manifest, client)
         call = client.compose_calls[0]
         # Exact args — no flags, no volume removal
         assert call.args == ["down"]

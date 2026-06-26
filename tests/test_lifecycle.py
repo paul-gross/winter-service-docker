@@ -179,20 +179,21 @@ def test_port_env_vars_no_services() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_build_compose_env_always_has_project_name(tmp_workspace: Path) -> None:
+def test_build_compose_env_always_has_project_name() -> None:
     from docker_orchestrator.env_context import build_env_context
 
     manifest = _make_manifest(prefix="myapp", services=["db"])
-    ctx = build_env_context("alpha", "myapp", tmp_workspace)
+    ctx = build_env_context("alpha", "myapp")
     env = _build_compose_env(ctx, manifest.services_for_scope("alpha"))
     assert env["COMPOSE_PROJECT_NAME"] == "myapp-alpha"
 
 
-def test_build_compose_env_includes_port_vars(tmp_workspace: Path) -> None:
+def test_build_compose_env_includes_port_vars(monkeypatch: pytest.MonkeyPatch) -> None:
     from docker_orchestrator.env_context import build_env_context
 
+    monkeypatch.setenv("WINTER_PORT_BASE", "4020")
     manifest = _make_manifest(prefix="myapp", services=["db", "api"])
-    ctx = build_env_context("alpha", "myapp", tmp_workspace)  # port_base=4020 from fixture
+    ctx = build_env_context("alpha", "myapp")
     env = _build_compose_env(ctx, manifest.services_for_scope("alpha"))
     assert env["WSD_PORT_DB"] == "4020"
     assert env["WSD_PORT_API"] == "4021"
@@ -218,7 +219,7 @@ def test_cmd_down_issues_compose_down(tmp_workspace: Path) -> None:
     """down issues ``compose down`` with correct project and env vars."""
     fake = FakeComposeClient(compose_results=[_ok_result(0)])
     manifest = _make_manifest(prefix="myapp", services=["db"])
-    rc = cmd_down("alpha", manifest, tmp_workspace, fake)
+    rc = cmd_down("alpha", manifest, fake)
     assert rc == 0
     assert len(fake.compose_calls) == 1
     call = fake.compose_calls[0]
@@ -231,7 +232,7 @@ def test_cmd_down_passes_compose_project_name_in_env(tmp_workspace: Path) -> Non
     """down passes COMPOSE_PROJECT_NAME in the compose invocation environment."""
     fake = FakeComposeClient(compose_results=[_ok_result(0)])
     manifest = _make_manifest(prefix="proj", services=["db"])
-    cmd_down("alpha", manifest, tmp_workspace, fake)
+    cmd_down("alpha", manifest, fake)
     call = fake.compose_calls[0]
     assert call.env is not None
     assert call.env["COMPOSE_PROJECT_NAME"] == "proj-alpha"
@@ -241,7 +242,7 @@ def test_cmd_down_returns_compose_exit_code_on_failure(tmp_workspace: Path) -> N
     """down propagates a non-zero compose exit code."""
     fake = FakeComposeClient(compose_results=[_ok_result(1)])
     manifest = _make_manifest(services=["db"])
-    rc = cmd_down("alpha", manifest, tmp_workspace, fake)
+    rc = cmd_down("alpha", manifest, fake)
     assert rc == 1
 
 
@@ -251,7 +252,7 @@ def test_cmd_down_returns_nonzero_on_missing_manifest(tmp_workspace: Path) -> No
     manifest = DockerManifest(
         project_prefix=None, environment_compose_file=None, workspace_compose_file=None, services=()
     )
-    rc = cmd_down("alpha", manifest, tmp_workspace, fake)
+    rc = cmd_down("alpha", manifest, fake)
     assert rc != 0
     assert fake.compose_calls == []
 
@@ -265,7 +266,7 @@ def test_cmd_down_compose_exception_returns_nonzero(tmp_workspace: Path) -> None
     fake = FakeComposeClient()
     fake.compose = exploding_compose  # type: ignore[method-assign]
     manifest = _make_manifest(services=["db"])
-    rc = cmd_down("alpha", manifest, tmp_workspace, fake)
+    rc = cmd_down("alpha", manifest, fake)
     assert rc != 0
     assert rc != 2
 
@@ -290,7 +291,6 @@ def test_cmd_up_issues_compose_up_d(tmp_workspace: Path) -> None:
     rc = cmd_up(
         "alpha",
         manifest,
-        tmp_workspace,
         fake,
         timeout=10.0,
         poll_interval=0.0,
@@ -304,8 +304,9 @@ def test_cmd_up_issues_compose_up_d(tmp_workspace: Path) -> None:
     assert up_call.args == ["up", "-d"]
 
 
-def test_cmd_up_passes_project_name_and_port_vars(tmp_workspace: Path) -> None:
+def test_cmd_up_passes_project_name_and_port_vars(tmp_workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """up injects COMPOSE_PROJECT_NAME and WSD_PORT_* into the compose env."""
+    monkeypatch.setenv("WINTER_PORT_BASE", "4020")
     clock = FakeClock()
     ps_containers = [_container_ps("db", "running")]
     fake = FakeComposeClient(
@@ -318,7 +319,6 @@ def test_cmd_up_passes_project_name_and_port_vars(tmp_workspace: Path) -> None:
     cmd_up(
         "alpha",
         manifest,
-        tmp_workspace,
         fake,
         timeout=10.0,
         poll_interval=0.0,
@@ -328,7 +328,7 @@ def test_cmd_up_passes_project_name_and_port_vars(tmp_workspace: Path) -> None:
     up_call = fake.compose_calls[0]
     assert up_call.env is not None
     assert up_call.env["COMPOSE_PROJECT_NAME"] == "myapp-alpha"
-    assert up_call.env["WSD_PORT_DB"] == "4020"  # port_base=4020 from fixture
+    assert up_call.env["WSD_PORT_DB"] == "4020"
     assert up_call.env["WSD_PORT_API"] == "4021"
 
 
@@ -340,7 +340,6 @@ def test_cmd_up_returns_nonzero_on_compose_up_failure(tmp_workspace: Path) -> No
     rc = cmd_up(
         "alpha",
         manifest,
-        tmp_workspace,
         fake,
         timeout=10.0,
         poll_interval=0.0,
@@ -362,7 +361,6 @@ def test_cmd_up_returns_nonzero_on_missing_manifest(tmp_workspace: Path) -> None
     rc = cmd_up(
         "alpha",
         manifest,
-        tmp_workspace,
         fake,
         timeout=10.0,
         poll_interval=0.0,
@@ -386,7 +384,6 @@ def test_cmd_up_compose_exception_returns_nonzero(tmp_workspace: Path) -> None:
     rc = cmd_up(
         "alpha",
         manifest,
-        tmp_workspace,
         fake,
         timeout=10.0,
         poll_interval=0.0,
@@ -416,7 +413,6 @@ def test_readiness_gate_returns_0_when_all_healthy_immediately(tmp_workspace: Pa
     rc = cmd_up(
         "alpha",
         manifest,
-        tmp_workspace,
         fake,
         timeout=30.0,
         poll_interval=0.0,
@@ -443,7 +439,6 @@ def test_readiness_gate_returns_0_after_multiple_polls(tmp_workspace: Path) -> N
     rc = cmd_up(
         "alpha",
         manifest,
-        tmp_workspace,
         fake,
         timeout=60.0,
         poll_interval=0.0,
@@ -476,7 +471,6 @@ def test_readiness_gate_timeout_returns_nonzero(tmp_workspace: Path) -> None:
     rc = cmd_up(
         "alpha",
         manifest,
-        tmp_workspace,
         fake,
         timeout=10.0,
         poll_interval=0.0,
@@ -502,7 +496,6 @@ def test_readiness_gate_timeout_emits_actionable_message(
     cmd_up(
         "alpha",
         manifest,
-        tmp_workspace,
         fake,
         timeout=10.0,
         poll_interval=0.0,
@@ -533,7 +526,6 @@ def test_readiness_gate_running_no_healthcheck_is_ready(tmp_workspace: Path) -> 
     rc = cmd_up(
         "alpha",
         manifest,
-        tmp_workspace,
         fake,
         timeout=10.0,
         poll_interval=0.0,
@@ -558,7 +550,6 @@ def test_readiness_gate_mixed_health_and_no_healthcheck(tmp_workspace: Path) -> 
     rc = cmd_up(
         "alpha",
         manifest,
-        tmp_workspace,
         fake,
         timeout=10.0,
         poll_interval=0.0,
@@ -591,7 +582,6 @@ def test_readiness_gate_uses_injected_sleep(tmp_workspace: Path) -> None:
     cmd_up(
         "alpha",
         manifest,
-        tmp_workspace,
         fake,
         timeout=30.0,
         poll_interval=2.0,
@@ -631,7 +621,6 @@ def test_readiness_gate_sleep_bounded_by_remaining(tmp_workspace: Path) -> None:
     rc = cmd_up(
         "alpha",
         manifest,
-        tmp_workspace,
         fake,
         timeout=5.0,
         poll_interval=100.0,

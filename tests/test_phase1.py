@@ -53,42 +53,40 @@ def test_compose_project_name_custom_prefix() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 2. Port-base parsing from fixture .winter.env
+# 2. Port-base parsing from the process environment
 # ---------------------------------------------------------------------------
 
 
-def test_read_port_base_alpha(tmp_workspace: Path) -> None:
-    base = read_port_base(tmp_workspace, "alpha")
+def test_read_port_base_alpha(monkeypatch: pytest.MonkeyPatch) -> None:
+    """read_port_base returns the integer value of WINTER_PORT_BASE from os.environ."""
+    monkeypatch.setenv("WINTER_PORT_BASE", "4020")
+    base = read_port_base()
     assert base == 4020
 
 
-def test_read_port_base_missing_env(tmp_workspace: Path) -> None:
-    """An env without a .winter.env returns None."""
-    base = read_port_base(tmp_workspace, "delta")
+def test_read_port_base_absent() -> None:
+    """When WINTER_PORT_BASE is not in the environment, returns None."""
+    base = read_port_base()
     assert base is None
 
 
-def test_read_port_base_workspace_scope(tmp_workspace: Path) -> None:
-    """Workspace scope always returns None (no per-env file)."""
-    base = read_port_base(tmp_workspace, WORKSPACE_SCOPE)
+def test_read_port_base_workspace_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Workspace scope reads WINTER_PORT_BASE from the process environment like any other scope."""
+    monkeypatch.setenv("WINTER_PORT_BASE", "4000")
+    base = read_port_base()
+    assert base == 4000
+
+
+def test_read_port_base_absent_returns_none() -> None:
+    """When WINTER_PORT_BASE is absent from the environment, returns None."""
+    base = read_port_base()
     assert base is None
 
 
-def test_read_port_base_key_absent(tmp_path: Path) -> None:
-    """A .winter.env that exists but lacks WINTER_PORT_BASE returns None."""
-    env_dir = tmp_path / "zeta"
-    env_dir.mkdir()
-    (env_dir / ".winter.env").write_text("WINTER_ENV=zeta\n", encoding="utf-8")
-    base = read_port_base(tmp_path, "zeta")
-    assert base is None
-
-
-def test_read_port_base_env_with_export(tmp_path: Path) -> None:
-    """parse_env_file strips leading 'export ' correctly."""
-    env_dir = tmp_path / "eta"
-    env_dir.mkdir()
-    (env_dir / ".winter.env").write_text("export WINTER_PORT_BASE=4100\n", encoding="utf-8")
-    base = read_port_base(tmp_path, "eta")
+def test_read_port_base_custom_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    """read_port_base returns any integer value injected via the process environment."""
+    monkeypatch.setenv("WINTER_PORT_BASE", "4100")
+    base = read_port_base()
     assert base == 4100
 
 
@@ -255,15 +253,16 @@ def test_cli_known_actions_exit_non_2(action: str, capsys: pytest.CaptureFixture
 # ---------------------------------------------------------------------------
 
 
-def test_build_env_context_alpha(tmp_workspace: Path) -> None:
-    ctx = build_env_context("alpha", "myapp", tmp_workspace)
+def test_build_env_context_alpha(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("WINTER_PORT_BASE", "4020")
+    ctx = build_env_context("alpha", "myapp")
     assert ctx.env == "alpha"
     assert ctx.compose_project_name == "myapp-alpha"
     assert ctx.port_base == 4020
 
 
-def test_build_env_context_workspace(tmp_workspace: Path) -> None:
-    ctx = build_env_context("workspace", "myapp", tmp_workspace)
+def test_build_env_context_workspace() -> None:
+    ctx = build_env_context("workspace", "myapp")
     assert ctx.env == "workspace"
     assert ctx.compose_project_name == "myapp-workspace"
     assert ctx.port_base is None

@@ -24,15 +24,13 @@ Scope identification (Phase 3 — core injection):
   process environment.  The provider reads the scope from the ``<scope>/*``
   pattern argument (primary source); ``WINTER_ENV`` is available in the
   environment as a cross-check.  The provider does NOT enumerate envs or
-  source ``.winter.env`` on the status path — all variable injection is
-  the responsibility of core.
+  read any per-env file on the status path — core injects all variables.
 """
 
 from __future__ import annotations
 
 import os
 import sys
-from pathlib import Path
 
 from docker_orchestrator.compose_client import IComposeClient
 from docker_orchestrator.compose_ps import (
@@ -105,10 +103,10 @@ def _build_status_compose_env(
 
     Starts from the current process environment (which already contains the
     core-injected ``WINTER_ENV``/``WINTER_ENV_INDEX``/``WINTER_PORT_BASE`` and
-    every variable sourced from the scope's env file), then overlays
+    every variable core injected for the scope), then overlays
     ``COMPOSE_PROJECT_NAME`` and, when *port_base* is not None, the
-    ``WSD_PORT_*`` port-substitution vars.  No ``.winter.env`` file is sourced
-    here — core has already done that.
+    ``WSD_PORT_*`` port-substitution vars.  No env file is read
+    here — core injects the scope's variables before invoking this provider.
     """
     env: dict[str, str] = dict(os.environ)
     env["COMPOSE_PROJECT_NAME"] = project_name
@@ -160,7 +158,6 @@ def _build_service_entry(container: dict, svc_name: str) -> dict:  # type: ignor
 def _status_for_env(
     env: str,
     manifest: DockerManifest,
-    workspace_root: Path,
     client: IComposeClient,
     patterns: list[str],
 ) -> dict:  # type: ignore[type-arg]
@@ -169,9 +166,8 @@ def _status_for_env(
     Returns a dict conforming to the winter env-keyed status document env shape.
 
     On the status path, ``WINTER_PORT_BASE`` is read from the process environment
-    (injected by winter-cli core) rather than from the ``.winter.env`` file.  No
-    env-file sourcing is performed here — core has already done that before
-    invoking this provider.
+    (injected by winter-cli core) rather than from any per-env file.  Core injects
+    the scope's variables before invoking this provider.
     """
     # Require manifest fields
     compose_file = manifest.compose_file_for_scope(env)
@@ -188,7 +184,7 @@ def _status_for_env(
         }
 
     # Read the scope's port base from the process environment (injected by core).
-    # Do NOT read the .winter.env file on the status path — core sources it.
+    # Do NOT read any per-env file on the status path — core injects it.
     # The workspace scope exposes its band as WINTER_WORKSPACE_PORT_BASE (it has
     # no per-env WINTER_PORT_BASE); per-env scopes use WINTER_PORT_BASE.
     import contextlib
@@ -276,7 +272,6 @@ import json  # noqa: E402  — import here to keep the module-level grouping rea
 def cmd_status(
     patterns: list[str],
     manifest: DockerManifest,
-    workspace_root: Path,
     client: IComposeClient,
 ) -> int:
     """Implement the ``status [<pattern>...]`` action.
@@ -296,8 +291,8 @@ def cmd_status(
        patterns is empty — should not happen in normal core-driven calls).
 
     The provider does NOT enumerate envs from the filesystem and does NOT
-    source ``.winter.env`` on the status path — those are core's
-    responsibilities.  ``WINTER_PORT_BASE`` is read from ``os.environ``.
+    read any per-env file on the status path — core injects the variables.
+    ``WINTER_PORT_BASE`` is read from ``os.environ``.
 
     Service-level pattern filtering (the ``/<svc>`` segment) is still applied
     within the single resolved scope so scope-qualified patterns like
@@ -323,7 +318,7 @@ def cmd_status(
         sys.stdout.flush()
         return 0
 
-    env_doc = _status_for_env(env, manifest, workspace_root, client, patterns)
+    env_doc = _status_for_env(env, manifest, client, patterns)
 
     doc = {"envs": [env_doc]}
     sys.stdout.write(json.dumps(doc) + "\n")

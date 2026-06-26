@@ -30,7 +30,7 @@ A [winter](https://github.com/paul-gross/winter) extension that adds docker comp
 
 3. **Edit `environment-compose.yaml`** — per-env services; use `${WSD_PORT_<NAME>}` for published ports.
 
-4. **Edit `workspace-compose.yaml`** — workspace singleton services; use fixed ports or reference `${WINTER_WORKSPACE_PORT_BASE}` from the sourced env file.
+4. **Edit `workspace-compose.yaml`** — workspace singleton services; use fixed ports or reference `${WINTER_WORKSPACE_PORT_BASE}` (injected by winter-cli core; available via `source <(winter env workspace)` for manual runs).
 
 5. **Register the extension** in workspace `.winter/config.toml`:
 
@@ -61,23 +61,23 @@ See [`index.md`](./index.md) for workspace-runtime rules, the port-substitution 
 
 ## 🔧 Manual parity
 
-Each scope-pure compose file is independently runnable by hand. The orchestrator **sources** the winter env file in a shell before invoking compose (not `--env-file`), so shell arithmetic like `WTS_DB_PORT=$(( WINTER_PORT_BASE + 12 ))` in the per-env file is evaluated (a workspace service keys the same arithmetic off `WINTER_WORKSPACE_PORT_BASE`, the band `.winter.workspace.env` seeds). To reproduce the same behavior:
+Each scope-pure compose file is independently runnable by hand. The orchestrator runs compose with the scope's environment injected by winter-cli core (not `--env-file`), so `${VAR}` references in the compose file resolve against the injected vars. To reproduce the same environment by hand, source it from `winter env <scope>`:
 
 ```bash
 # Per-env services (e.g. alpha env, project_prefix=myapp):
-set -a; . alpha/.winter.env; set +a
+source <(winter env alpha)
 docker compose -p myapp-alpha \
     -f .winter/config/winter-service-docker/environment-compose.yaml \
     up -d
 
 # Workspace singleton services:
-set -a; . .winter.workspace.env; set +a
+source <(winter env workspace)
 docker compose -p myapp-workspace \
     -f .winter/config/winter-service-docker/workspace-compose.yaml \
     up -d
 ```
 
-See `ai/provider-contract.md#env-file-sourcing` for the full sourcing contract (which env file per scope, shell-arithmetic support, and precedence rules). Replace `myapp` with your actual `project_prefix`.
+See `ai/provider-contract.md#environment-variable-injection` for the full injection contract (which variables per scope, and precedence rules). Replace `myapp` with your actual `project_prefix`.
 
 ## License
 

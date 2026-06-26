@@ -337,7 +337,7 @@ def test_cmd_status_no_patterns_uses_winter_env(tmp_workspace: Path, capsys: pyt
     fake = _fake_client_ps(containers)
     manifest = _make_manifest(services=["db"])
     with patch.dict("os.environ", {"WINTER_ENV": "alpha", "WINTER_PORT_BASE": "4020"}):
-        rc = cmd_status(patterns=[], manifest=manifest, workspace_root=tmp_workspace, client=fake)
+        rc = cmd_status(patterns=[], manifest=manifest, client=fake)
     assert rc == 0
     captured = capsys.readouterr()
     doc = json.loads(captured.out)
@@ -354,7 +354,7 @@ def test_cmd_status_no_patterns_empty_workspace(tmp_path: Path, capsys: pytest.C
     # Ensure WINTER_ENV is not set so the fallback also finds nothing.
     env = {k: v for k, v in __import__("os").environ.items() if k != "WINTER_ENV"}
     with patch.dict("os.environ", env, clear=True):
-        rc = cmd_status(patterns=[], manifest=manifest, workspace_root=tmp_path, client=fake)
+        rc = cmd_status(patterns=[], manifest=manifest, client=fake)
     assert rc == 0
     captured = capsys.readouterr()
     doc = json.loads(captured.out)
@@ -367,7 +367,7 @@ def test_cmd_status_running_healthy(tmp_workspace: Path, capsys: pytest.CaptureF
     containers = [_container("db", "running", "healthy", publishers=[{"PublishedPort": 5432}])]
     fake = _fake_client_ps(containers)
     manifest = _make_manifest(services=["db"])
-    rc = cmd_status(patterns=["alpha"], manifest=manifest, workspace_root=tmp_workspace, client=fake)
+    rc = cmd_status(patterns=["alpha"], manifest=manifest, client=fake)
     assert rc == 0
     doc = json.loads(capsys.readouterr().out)
     svc = doc["envs"][0]["services"][0]
@@ -381,7 +381,7 @@ def test_cmd_status_running_no_healthcheck(tmp_workspace: Path, capsys: pytest.C
     containers = [_container("api", "running", health_status=None)]
     fake = _fake_client_ps(containers)
     manifest = _make_manifest(services=["api"])
-    rc = cmd_status(patterns=["alpha"], manifest=manifest, workspace_root=tmp_workspace, client=fake)
+    rc = cmd_status(patterns=["alpha"], manifest=manifest, client=fake)
     assert rc == 0
     doc = json.loads(capsys.readouterr().out)
     svc = doc["envs"][0]["services"][0]
@@ -393,7 +393,7 @@ def test_cmd_status_running_unhealthy(tmp_workspace: Path, capsys: pytest.Captur
     containers = [_container("api", "running", "unhealthy")]
     fake = _fake_client_ps(containers)
     manifest = _make_manifest(services=["api"])
-    rc = cmd_status(patterns=["alpha"], manifest=manifest, workspace_root=tmp_workspace, client=fake)
+    rc = cmd_status(patterns=["alpha"], manifest=manifest, client=fake)
     assert rc == 0
     doc = json.loads(capsys.readouterr().out)
     svc = doc["envs"][0]["services"][0]
@@ -406,7 +406,7 @@ def test_cmd_status_running_starting(tmp_workspace: Path, capsys: pytest.Capture
     containers = [_container("api", "running", "starting")]
     fake = _fake_client_ps(containers)
     manifest = _make_manifest(services=["api"])
-    rc = cmd_status(patterns=["alpha"], manifest=manifest, workspace_root=tmp_workspace, client=fake)
+    rc = cmd_status(patterns=["alpha"], manifest=manifest, client=fake)
     assert rc == 0
     doc = json.loads(capsys.readouterr().out)
     svc = doc["envs"][0]["services"][0]
@@ -418,7 +418,7 @@ def test_cmd_status_exited(tmp_workspace: Path, capsys: pytest.CaptureFixture[st
     containers = [_container("db", "exited")]
     fake = _fake_client_ps(containers)
     manifest = _make_manifest(services=["db"])
-    rc = cmd_status(patterns=["alpha"], manifest=manifest, workspace_root=tmp_workspace, client=fake)
+    rc = cmd_status(patterns=["alpha"], manifest=manifest, client=fake)
     assert rc == 0
     doc = json.loads(capsys.readouterr().out)
     svc = doc["envs"][0]["services"][0]
@@ -430,7 +430,7 @@ def test_cmd_status_created(tmp_workspace: Path, capsys: pytest.CaptureFixture[s
     containers = [_container("db", "created")]
     fake = _fake_client_ps(containers)
     manifest = _make_manifest(services=["db"])
-    rc = cmd_status(patterns=["alpha"], manifest=manifest, workspace_root=tmp_workspace, client=fake)
+    rc = cmd_status(patterns=["alpha"], manifest=manifest, client=fake)
     assert rc == 0
     doc = json.loads(capsys.readouterr().out)
     svc = doc["envs"][0]["services"][0]
@@ -442,7 +442,7 @@ def test_cmd_status_declared_not_in_compose(tmp_workspace: Path, capsys: pytest.
     """A declared service absent from compose ps output → stopped/unknown."""
     fake = _fake_client_ps([])  # compose returns nothing
     manifest = _make_manifest(services=["db", "api"])
-    rc = cmd_status(patterns=["alpha"], manifest=manifest, workspace_root=tmp_workspace, client=fake)
+    rc = cmd_status(patterns=["alpha"], manifest=manifest, client=fake)
     assert rc == 0
     doc = json.loads(capsys.readouterr().out)
     services = doc["envs"][0]["services"]
@@ -458,7 +458,7 @@ def test_cmd_status_array_encoding(tmp_workspace: Path, capsys: pytest.CaptureFi
     containers = [_container("db", "running", "healthy")]
     fake = _fake_client_ps(containers, encoding="array")
     manifest = _make_manifest(services=["db"])
-    rc = cmd_status(patterns=["alpha"], manifest=manifest, workspace_root=tmp_workspace, client=fake)
+    rc = cmd_status(patterns=["alpha"], manifest=manifest, client=fake)
     assert rc == 0
     doc = json.loads(capsys.readouterr().out)
     svc = doc["envs"][0]["services"][0]
@@ -472,7 +472,7 @@ def test_cmd_status_document_shape(tmp_workspace: Path, capsys: pytest.CaptureFi
     fake = _fake_client_ps(containers)
     manifest = _make_manifest(services=["db"])
     with patch.dict("os.environ", {"WINTER_PORT_BASE": "4020"}):
-        rc = cmd_status(patterns=["alpha"], manifest=manifest, workspace_root=tmp_workspace, client=fake)
+        rc = cmd_status(patterns=["alpha"], manifest=manifest, client=fake)
     assert rc == 0
     doc = json.loads(capsys.readouterr().out)
 
@@ -495,7 +495,7 @@ def test_cmd_status_handle_from_container_name(tmp_workspace: Path, capsys: pyte
     containers = [_container("db", "running", name="myapp-alpha-db-1")]
     fake = _fake_client_ps(containers)
     manifest = _make_manifest(services=["db"])
-    rc = cmd_status(patterns=["alpha"], manifest=manifest, workspace_root=tmp_workspace, client=fake)
+    rc = cmd_status(patterns=["alpha"], manifest=manifest, client=fake)
     assert rc == 0
     doc = json.loads(capsys.readouterr().out)
     svc = doc["envs"][0]["services"][0]
@@ -507,7 +507,7 @@ def test_cmd_status_since_from_started_at(tmp_workspace: Path, capsys: pytest.Ca
     containers = [_container("db", "running", started_at=ts)]
     fake = _fake_client_ps(containers)
     manifest = _make_manifest(services=["db"])
-    rc = cmd_status(patterns=["alpha"], manifest=manifest, workspace_root=tmp_workspace, client=fake)
+    rc = cmd_status(patterns=["alpha"], manifest=manifest, client=fake)
     assert rc == 0
     doc = json.loads(capsys.readouterr().out)
     svc = doc["envs"][0]["services"][0]
@@ -522,7 +522,7 @@ def test_cmd_status_pattern_filters_service(tmp_workspace: Path, capsys: pytest.
     ]
     fake = _fake_client_ps(containers)
     manifest = _make_manifest(services=["db", "api"])
-    rc = cmd_status(patterns=["alpha/db"], manifest=manifest, workspace_root=tmp_workspace, client=fake)
+    rc = cmd_status(patterns=["alpha/db"], manifest=manifest, client=fake)
     assert rc == 0
     doc = json.loads(capsys.readouterr().out)
     services = doc["envs"][0]["services"]
@@ -538,7 +538,7 @@ def test_cmd_status_pattern_wildcard_service(tmp_workspace: Path, capsys: pytest
     ]
     fake = _fake_client_ps(containers)
     manifest = _make_manifest(services=["db", "api"])
-    rc = cmd_status(patterns=["alpha/*"], manifest=manifest, workspace_root=tmp_workspace, client=fake)
+    rc = cmd_status(patterns=["alpha/*"], manifest=manifest, client=fake)
     assert rc == 0
     doc = json.loads(capsys.readouterr().out)
     assert len(doc["envs"][0]["services"]) == 2
@@ -550,7 +550,7 @@ def test_cmd_status_missing_manifest_fields(tmp_workspace: Path, capsys: pytest.
         project_prefix=None, environment_compose_file=None, workspace_compose_file=None, services=()
     )
     fake = FakeComposeClient()
-    rc = cmd_status(patterns=["alpha"], manifest=manifest, workspace_root=tmp_workspace, client=fake)
+    rc = cmd_status(patterns=["alpha"], manifest=manifest, client=fake)
     assert rc == 0
     doc = json.loads(capsys.readouterr().out)
     env_doc = doc["envs"][0]
@@ -563,7 +563,7 @@ def test_cmd_status_empty_compose_output(tmp_workspace: Path, capsys: pytest.Cap
     result = subprocess.CompletedProcess([], 0, stdout="", stderr="")
     fake = FakeComposeClient(compose_results=[result])
     manifest = _make_manifest(services=["db"])
-    rc = cmd_status(patterns=["alpha"], manifest=manifest, workspace_root=tmp_workspace, client=fake)
+    rc = cmd_status(patterns=["alpha"], manifest=manifest, client=fake)
     assert rc == 0
     doc = json.loads(capsys.readouterr().out)
     svc = doc["envs"][0]["services"][0]
@@ -574,7 +574,7 @@ def test_cmd_status_compose_called_with_project_name(tmp_workspace: Path, capsys
     """compose ps is called with the correct project name and --all flag."""
     fake = _fake_client_ps([])
     manifest = _make_manifest(prefix="proj", services=["db"])
-    cmd_status(patterns=["alpha"], manifest=manifest, workspace_root=tmp_workspace, client=fake)
+    cmd_status(patterns=["alpha"], manifest=manifest, client=fake)
     assert len(fake.compose_calls) == 1
     call = fake.compose_calls[0]
     assert call.project == "proj-alpha"
@@ -587,7 +587,7 @@ def test_cmd_status_multiple_ports(tmp_workspace: Path, capsys: pytest.CaptureFi
     containers = [_container("web", "running", publishers=pubs)]
     fake = _fake_client_ps(containers)
     manifest = _make_manifest(services=["web"])
-    rc = cmd_status(patterns=["alpha"], manifest=manifest, workspace_root=tmp_workspace, client=fake)
+    rc = cmd_status(patterns=["alpha"], manifest=manifest, client=fake)
     assert rc == 0
     doc = json.loads(capsys.readouterr().out)
     ports = doc["envs"][0]["services"][0]["ports"]
@@ -599,7 +599,7 @@ def test_cmd_status_log_path_is_null(tmp_workspace: Path, capsys: pytest.Capture
     containers = [_container("db", "running")]
     fake = _fake_client_ps(containers)
     manifest = _make_manifest(services=["db"])
-    cmd_status(patterns=["alpha"], manifest=manifest, workspace_root=tmp_workspace, client=fake)
+    cmd_status(patterns=["alpha"], manifest=manifest, client=fake)
     doc = json.loads(capsys.readouterr().out)
     assert doc["envs"][0]["services"][0]["log_path"] is None
 
@@ -676,7 +676,7 @@ def test_cmd_status_single_scope_from_pattern(tmp_path: Path, capsys: pytest.Cap
     manifest = _make_manifest(services=["db"])
 
     with patch.dict("os.environ", {"WINTER_ENV": "alpha", "WINTER_PORT_BASE": "4020"}):
-        rc = cmd_status(patterns=["alpha/*"], manifest=manifest, workspace_root=tmp_path, client=fake)
+        rc = cmd_status(patterns=["alpha/*"], manifest=manifest, client=fake)
     assert rc == 0
     doc = json.loads(capsys.readouterr().out)
     # Only one scope reported — no filesystem enumeration
@@ -698,7 +698,7 @@ def test_cmd_status_reads_port_base_from_env_not_file(tmp_path: Path, capsys: py
     fake = _fake_client_ps([])
 
     with patch.dict("os.environ", {"WINTER_ENV": "alpha", "WINTER_PORT_BASE": "9999"}):
-        rc = cmd_status(patterns=["alpha/*"], manifest=manifest, workspace_root=tmp_path, client=fake)
+        rc = cmd_status(patterns=["alpha/*"], manifest=manifest, client=fake)
     assert rc == 0
     doc = json.loads(capsys.readouterr().out)
     assert doc["envs"][0]["port_base"] == 9999
@@ -720,7 +720,7 @@ def test_cmd_status_injected_env_wins_over_file(tmp_path: Path, capsys: pytest.C
     fake = _fake_client_ps([])
 
     with patch.dict("os.environ", {"WINTER_ENV": "alpha", "WINTER_PORT_BASE": "7777"}):
-        rc = cmd_status(patterns=["alpha/*"], manifest=manifest, workspace_root=tmp_path, client=fake)
+        rc = cmd_status(patterns=["alpha/*"], manifest=manifest, client=fake)
     assert rc == 0
     doc = json.loads(capsys.readouterr().out)
     # 7777 (injected) must win over 4020 (file); no self-sourcing occurred
@@ -734,7 +734,7 @@ def test_cmd_status_no_patterns_no_env_var_returns_empty(tmp_path: Path, capsys:
     # Ensure WINTER_ENV is absent
     env = {k: v for k, v in __import__("os").environ.items() if k != "WINTER_ENV"}
     with patch.dict("os.environ", env, clear=True):
-        rc = cmd_status(patterns=[], manifest=manifest, workspace_root=tmp_path, client=fake)
+        rc = cmd_status(patterns=[], manifest=manifest, client=fake)
     assert rc == 0
     doc = json.loads(capsys.readouterr().out)
     assert doc == {"envs": []}
@@ -751,7 +751,7 @@ def test_cmd_status_scope_qualified_pattern_filters_service(tmp_path: Path, caps
     manifest = _make_manifest(services=["db", "api"])
 
     with patch.dict("os.environ", {"WINTER_ENV": "alpha", "WINTER_PORT_BASE": "4020"}):
-        rc = cmd_status(patterns=["alpha/db"], manifest=manifest, workspace_root=tmp_path, client=fake)
+        rc = cmd_status(patterns=["alpha/db"], manifest=manifest, client=fake)
     assert rc == 0
     doc = json.loads(capsys.readouterr().out)
     assert doc["envs"][0]["env"] == "alpha"
@@ -768,7 +768,7 @@ def test_cmd_status_ps_args_include_all_flag(tmp_workspace: Path, capsys: pytest
     """compose ps is called with --all so exited containers are visible."""
     fake = _fake_client_ps([])
     manifest = _make_manifest(services=["db"])
-    cmd_status(patterns=["alpha"], manifest=manifest, workspace_root=tmp_workspace, client=fake)
+    cmd_status(patterns=["alpha"], manifest=manifest, client=fake)
     call = fake.compose_calls[0]
     assert "--all" in call.args
 
@@ -780,7 +780,7 @@ def test_cmd_status_exited_container_maps_to_stopped_via_all(
     containers = [_container("db", "exited")]
     fake = _fake_client_ps(containers)
     manifest = _make_manifest(services=["db"])
-    rc = cmd_status(patterns=["alpha"], manifest=manifest, workspace_root=tmp_workspace, client=fake)
+    rc = cmd_status(patterns=["alpha"], manifest=manifest, client=fake)
     assert rc == 0
     doc = json.loads(capsys.readouterr().out)
     svc = doc["envs"][0]["services"][0]

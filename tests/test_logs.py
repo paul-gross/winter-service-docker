@@ -185,7 +185,7 @@ def test_cmd_logs_ndjson_env_svc_present(tmp_path: Path) -> None:
     )
     sink = StringIO()
 
-    rc = cmd_logs(["alpha/db"], manifest, tmp_path, client, sink=sink, follow=False)
+    rc = cmd_logs(["alpha/db"], manifest, client, sink=sink, follow=False)
 
     assert rc == 0
     output = sink.getvalue().strip().split("\n")
@@ -204,7 +204,7 @@ def test_cmd_logs_ndjson_ts_field(tmp_path: Path) -> None:
     client = FakeComposeClient(compose_results=[_ok_result(stdout="".join(lines))])
     sink = StringIO()
 
-    cmd_logs(["alpha/db"], manifest, tmp_path, client, sink=sink, follow=False)
+    cmd_logs(["alpha/db"], manifest, client, sink=sink, follow=False)
 
     obj = json.loads(sink.getvalue().strip())
     assert obj["ts"] is not None
@@ -219,7 +219,7 @@ def test_cmd_logs_ndjson_unparseable_ts_is_null(tmp_path: Path) -> None:
     client = FakeComposeClient(compose_results=[_ok_result(stdout="".join(lines))])
     sink = StringIO()
 
-    cmd_logs(["alpha/db"], manifest, tmp_path, client, sink=sink, follow=False)
+    cmd_logs(["alpha/db"], manifest, client, sink=sink, follow=False)
 
     obj = json.loads(sink.getvalue().strip())
     assert obj["ts"] is None
@@ -246,7 +246,7 @@ def test_cmd_logs_multi_service_fan_out(tmp_path: Path) -> None:
     )
     sink = StringIO()
 
-    rc = cmd_logs(["alpha/*"], manifest, tmp_path, client, sink=sink, follow=False)
+    rc = cmd_logs(["alpha/*"], manifest, client, sink=sink, follow=False)
 
     assert rc == 0
     assert len(client.compose_calls) == 2
@@ -271,7 +271,7 @@ def test_cmd_logs_empty_patterns_returns_0(tmp_path: Path) -> None:
     client = FakeComposeClient()
     sink = StringIO()
 
-    rc = cmd_logs([], manifest, tmp_path, client, sink=sink, follow=False)
+    rc = cmd_logs([], manifest, client, sink=sink, follow=False)
 
     assert rc == 0
     assert len(client.compose_calls) == 0
@@ -288,7 +288,7 @@ def test_cmd_logs_pattern_filters_service(tmp_path: Path) -> None:
     client = FakeComposeClient(compose_default=_ok_result(""))
     sink = StringIO()
 
-    rc = cmd_logs(["alpha/db"], manifest, tmp_path, client, sink=sink, follow=False)
+    rc = cmd_logs(["alpha/db"], manifest, client, sink=sink, follow=False)
 
     assert rc == 0
     assert len(client.compose_calls) == 1
@@ -305,7 +305,7 @@ def test_cmd_logs_non_follow_uses_compose(tmp_path: Path) -> None:
     client = FakeComposeClient(compose_default=_ok_result(""))
     sink = StringIO()
 
-    cmd_logs(["alpha/db"], manifest, tmp_path, client, sink=sink, follow=False)
+    cmd_logs(["alpha/db"], manifest, client, sink=sink, follow=False)
 
     assert len(client.compose_calls) == 1
     assert len(client.compose_stream_calls) == 0
@@ -317,7 +317,7 @@ def test_cmd_logs_follow_uses_compose_stream(tmp_path: Path) -> None:
     client = FakeComposeClient(compose_stream_results=[(stream_lines, 0)])
     sink = StringIO()
 
-    rc = cmd_logs(["alpha/db"], manifest, tmp_path, client, sink=sink, follow=True)
+    rc = cmd_logs(["alpha/db"], manifest, client, sink=sink, follow=True)
 
     assert rc == 0
     assert len(client.compose_calls) == 0
@@ -339,7 +339,7 @@ def test_cmd_logs_follow_streams_lines_incrementally(tmp_path: Path) -> None:
     client = FakeComposeClient(compose_stream_results=[(stream_lines, 0)])
     sink = StringIO()
 
-    rc = cmd_logs(["alpha/db"], manifest, tmp_path, client, sink=sink, follow=True)
+    rc = cmd_logs(["alpha/db"], manifest, client, sink=sink, follow=True)
 
     assert rc == 0
     output_lines = [ln for ln in sink.getvalue().strip().split("\n") if ln]
@@ -373,14 +373,14 @@ def test_cmd_logs_follow_broken_pipe_returns_0(tmp_path: Path) -> None:
         def docker(self, *a, **kw):
             return subprocess.CompletedProcess([], 0, stdout="", stderr="")
 
-        def compose_stream(self, project, compose_file, args, *, env=None, source_env_file=None):
+        def compose_stream(self, project, compose_file, args, *, env=None):
             self.compose_stream_calls.append((project, args))
             return _bp_iter(), lambda: 0
 
     client = _BPClient()
     sink = StringIO()
 
-    rc = cmd_logs(["alpha/db"], manifest, tmp_path, client, sink=sink, follow=True)
+    rc = cmd_logs(["alpha/db"], manifest, client, sink=sink, follow=True)
 
     assert rc == 0
 
@@ -400,7 +400,7 @@ def test_cmd_logs_missing_prefix_returns_1(tmp_path: Path, capsys: pytest.Captur
     client = FakeComposeClient()
     sink = StringIO()
 
-    rc = cmd_logs(["alpha/db"], manifest, tmp_path, client, sink=sink)
+    rc = cmd_logs(["alpha/db"], manifest, client, sink=sink)
 
     assert rc == 1
     assert "manifest is missing" in capsys.readouterr().err
@@ -416,7 +416,7 @@ def test_cmd_logs_missing_compose_file_returns_1(tmp_path: Path, capsys: pytest.
     client = FakeComposeClient()
     sink = StringIO()
 
-    rc = cmd_logs(["alpha/db"], manifest, tmp_path, client, sink=sink)
+    rc = cmd_logs(["alpha/db"], manifest, client, sink=sink)
 
     assert rc == 1
     assert "manifest is missing" in capsys.readouterr().err
@@ -432,7 +432,7 @@ def test_cmd_logs_no_match_returns_1(tmp_path: Path, capsys: pytest.CaptureFixtu
     client = FakeComposeClient()
     sink = StringIO()
 
-    rc = cmd_logs(["alpha/notexist"], manifest, tmp_path, client, sink=sink)
+    rc = cmd_logs(["alpha/notexist"], manifest, client, sink=sink)
 
     assert rc == 1
     assert "no services matched" in capsys.readouterr().err
@@ -525,7 +525,7 @@ def test_cmd_logs_kwargs_tail_maps_to_compose_arg(tmp_path: Path) -> None:
     client = FakeComposeClient(compose_default=_ok_result(""))
     sink = StringIO()
 
-    cmd_logs(["alpha/db"], manifest, tmp_path, client, sink=sink, follow=False, tail="50")
+    cmd_logs(["alpha/db"], manifest, client, sink=sink, follow=False, tail="50")
 
     args = client.compose_calls[0].args
     assert "--tail" in args

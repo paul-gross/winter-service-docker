@@ -1,104 +1,47 @@
 """Per-env context derivation for winter-service-docker.
 
-Given an env name (or the reserved ``workspace`` scope) plus the workspace root,
-this module computes:
+Given an env name (or the reserved ``workspace`` scope), this module computes:
 
 - ``COMPOSE_PROJECT_NAME`` = ``<project_prefix>-<env>``  (or ``<prefix>-workspace``)
-- ``port_base`` by reading ``<workspace>/<env>/.winter.env`` for ``WINTER_PORT_BASE``
+- ``port_base`` by reading ``WINTER_PORT_BASE`` from the process environment
+  (injected by winter-cli core via ``EnvProvisionerService`` before invoking the
+  provider subprocess — no env file is read or sourced)
 
 Port derivation:
-    ``WINTER_PORT_BASE`` from the env's ``.winter.env`` file is the base for all
-    published host ports.  Callers can use ``published_port(base, offset)`` to
-    compute a specific port.
+    ``WINTER_PORT_BASE`` in ``os.environ`` is the base for all published host
+    ports.  Callers can use ``published_port(base, offset)`` to compute a
+    specific port.
 
 The ``workspace`` scope is the reserved name for the workspace-scoped singleton
-session.  Its ``.winter.env`` does not exist, so ``port_base`` will be ``None``
-for workspace contexts.
+session.  Core injects its own ``WINTER_PORT_BASE`` for the workspace scope too,
+so ``read_port_base`` returns it consistently for all scopes.
 """
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
-from pathlib import Path
 
 WORKSPACE_SCOPE = "workspace"
-_WINTER_ENV_FILE = ".winter.env"
-_WINTER_WORKSPACE_ENV_FILE = ".winter.workspace.env"
 
 
-def _parse_env_file(text: str) -> dict[str, str]:
-    """Parse a simple KEY=VALUE env file into a dict.
+def read_port_base() -> int | None:
+    """Read ``WINTER_PORT_BASE`` from the process environment.
 
-    Blank lines and ``#``-comments are skipped.  A leading ``export `` token is
-    stripped.  Single and double quotes wrapping the value are removed.
+    Winter-cli core computes and injects ``WINTER_PORT_BASE`` into the provider
+    subprocess environment via ``EnvProvisionerService`` before invoking any
+    action.  Providers read it from ``os.environ`` — no env file is accessed.
+
+    Returns the integer port base, or ``None`` when the key is absent or
+    non-integer.
     """
-    result: dict[str, str] = {}
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if line.startswith("export "):
-            line = line[len("export ") :].lstrip()
-        if "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        key = key.strip()
-        if not key:
-            continue
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
-            value = value[1:-1]
-        result[key] = value
-    return result
-
-
-def read_port_base(workspace_root: Path, env: str) -> int | None:
-    """Read ``WINTER_PORT_BASE`` from ``<workspace>/<env>/.winter.env``.
-
-    Returns the integer port base, or ``None`` when the file is absent or the
-    key is not present.  The workspace scope has no env file, so this always
-    returns ``None`` for ``env == "workspace"``.
-    """
-    if env == WORKSPACE_SCOPE:
-        return None
-    env_file = workspace_root / env / _WINTER_ENV_FILE
-    if not env_file.exists():
-        return None
-    try:
-        text = env_file.read_text(encoding="utf-8")
-    except OSError:
-        return None
-    parsed = _parse_env_file(text)
-    raw = parsed.get("WINTER_PORT_BASE")
+    raw = os.environ.get("WINTER_PORT_BASE")
     if raw is None:
         return None
     try:
         return int(raw)
     except ValueError:
         return None
-
-
-def resolve_env_file(workspace_root: Path, env: str) -> str | None:
-    """Return the winter-seeded env file to *source* before a compose invocation.
-
-    Feature env  → ``<workspace>/<env>/.winter.env``.
-    Workspace scope → ``<workspace>/.winter.workspace.env`` (the index-0 band that
-    ``winter ws init`` seeds for workspace-scoped services).
-
-    Returns the absolute path as a string when the file exists, else ``None`` —
-    in which case sourcing is skipped and ``docker compose`` runs with the
-    unmodified process environment.
-
-    The orchestrator *sources* this file in a shell before exec'ing compose (it
-    does not merely parse it), so the file may carry shell arithmetic — e.g.
-    ``WTS_DB_PORT=$((WINTER_PORT_BASE + 12))`` — evaluated by the shell and
-    exported into the environment ``docker compose`` inherits. This mirrors how
-    winter-service-tmux ``source``s the same file for each service pane.
-    """
-    if env == WORKSPACE_SCOPE:
-        env_file = workspace_root / _WINTER_WORKSPACE_ENV_FILE
-    else:
-        env_file = workspace_root / env / _WINTER_ENV_FILE
-    return str(env_file) if env_file.exists() else None
 
 
 def compose_project_name(project_prefix: str, env: str) -> str:
@@ -125,8 +68,8 @@ class EnvContext:
     Fields:
         env: The env name (e.g. ``"alpha"`` or ``"workspace"``).
         compose_project_name: The value for ``COMPOSE_PROJECT_NAME``.
-        port_base: ``WINTER_PORT_BASE`` from the env's ``.winter.env``, or ``None``
-            when the file is absent (workspace scope or uninitialized env).
+        port_base: ``WINTER_PORT_BASE`` from the process environment (injected by
+            winter-cli core), or ``None`` when absent.
     """
 
     env: str
@@ -137,15 +80,14 @@ class EnvContext:
 def build_env_context(
     env: str,
     project_prefix: str,
-    workspace_root: Path,
 ) -> EnvContext:
-    """Build an ``EnvContext`` for *env* using *project_prefix* and *workspace_root*.
+    """Build an ``EnvContext`` for *env* using *project_prefix*.
 
-    Reads the env's ``.winter.env`` file to populate ``port_base``; missing file
-    or missing key yields ``port_base=None``.
+    Reads ``WINTER_PORT_BASE`` from the process environment (core-injected) to
+    populate ``port_base``; absent or non-integer value yields ``port_base=None``.
     """
     project_name = compose_project_name(project_prefix, env)
-    port_base = read_port_base(workspace_root, env)
+    port_base = read_port_base()
     return EnvContext(
         env=env,
         compose_project_name=project_name,

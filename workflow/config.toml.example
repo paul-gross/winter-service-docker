@@ -18,14 +18,14 @@ project_prefix = "myapp"
 
 # Path to the compose file for per-env (project-scoped) services.
 # Contains ONLY project-scoped services — independently runnable by hand
-# (source the env file in a shell first; see ai/provider-contract.md#env-file-sourcing).
+# (source the scope env first with `source <(winter env <scope>)`; see ai/provider-contract.md#environment-variable-injection).
 # Relative paths are resolved relative to this config dir (alongside config.toml).
 # Absolute paths are used as-is.
 environment_compose_file = "environment-compose.yaml"
 
 # Path to the compose file for workspace-scoped singleton services.
 # Contains ONLY workspace-scoped services — independently runnable by hand
-# (source the env file in a shell first; see ai/provider-contract.md#env-file-sourcing).
+# (source the scope env first with `source <(winter env <scope>)`; see ai/provider-contract.md#environment-variable-injection).
 # Relative paths are resolved relative to this config dir (alongside config.toml).
 # Absolute paths are used as-is.
 workspace_compose_file = "workspace-compose.yaml"
@@ -63,7 +63,7 @@ workspace_compose_file = "workspace-compose.yaml"
 #   Workspace-scoped services get no WSD_PORT_* (that per-env auto-derivation
 #   needs a per-env WINTER_PORT_BASE, which the workspace scope has not). Use
 #   fixed host ports in workspace-compose.yaml, or reference
-#   ${WINTER_WORKSPACE_PORT_BASE} from the sourced .winter.workspace.env.
+#   ${WINTER_WORKSPACE_PORT_BASE} (injected by core for the workspace scope).
 # ---------------------------------------------------------------------------
 
 [[service]]
