@@ -41,6 +41,7 @@ from docker_orchestrator.compose_ps import (
     map_docker_state,
     parse_compose_ps_output,
 )
+from docker_orchestrator.env_context import WORKSPACE_SCOPE
 from docker_orchestrator.env_context import compose_project_name as _compose_project_name
 from docker_orchestrator.manifest import DockerManifest
 from docker_orchestrator.patterns import envs_from_patterns, has_glob, service_matches_any_pattern
@@ -186,12 +187,15 @@ def _status_for_env(
             "services": [],
         }
 
-    # Read WINTER_PORT_BASE from the process environment (injected by core).
+    # Read the scope's port base from the process environment (injected by core).
     # Do NOT read the .winter.env file on the status path — core sources it.
+    # The workspace scope exposes its band as WINTER_WORKSPACE_PORT_BASE (it has
+    # no per-env WINTER_PORT_BASE); per-env scopes use WINTER_PORT_BASE.
     import contextlib
 
     port_base: int | None = None
-    raw_port_base = os.environ.get("WINTER_PORT_BASE")
+    port_base_var = "WINTER_WORKSPACE_PORT_BASE" if env == WORKSPACE_SCOPE else "WINTER_PORT_BASE"
+    raw_port_base = os.environ.get(port_base_var)
     if raw_port_base is not None:
         with contextlib.suppress(ValueError):
             port_base = int(raw_port_base)

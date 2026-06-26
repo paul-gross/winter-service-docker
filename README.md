@@ -30,7 +30,7 @@ A [winter](https://github.com/paul-gross/winter) extension that adds docker comp
 
 3. **Edit `environment-compose.yaml`** — per-env services; use `${WSD_PORT_<NAME>}` for published ports.
 
-4. **Edit `workspace-compose.yaml`** — workspace singleton services; use fixed ports or reference `${WINTER_PORT_BASE}` from the sourced env file.
+4. **Edit `workspace-compose.yaml`** — workspace singleton services; use fixed ports or reference `${WINTER_WORKSPACE_PORT_BASE}` from the sourced env file.
 
 5. **Register the extension** in workspace `.winter/config.toml`:
 
@@ -61,7 +61,7 @@ See [`index.md`](./index.md) for workspace-runtime rules, the port-substitution 
 
 ## 🔧 Manual parity
 
-Each scope-pure compose file is independently runnable by hand. The orchestrator **sources** the winter env file in a shell before invoking compose (not `--env-file`), so shell arithmetic like `WTS_DB_PORT=$(( WINTER_PORT_BASE + 12 ))` in the env file is evaluated. To reproduce the same behavior:
+Each scope-pure compose file is independently runnable by hand. The orchestrator **sources** the winter env file in a shell before invoking compose (not `--env-file`), so shell arithmetic like `WTS_DB_PORT=$(( WINTER_PORT_BASE + 12 ))` in the per-env file is evaluated (a workspace service keys the same arithmetic off `WINTER_WORKSPACE_PORT_BASE`, the band `.winter.workspace.env` seeds). To reproduce the same behavior:
 
 ```bash
 # Per-env services (e.g. alpha env, project_prefix=myapp):

@@ -50,7 +50,7 @@ class TestResolveEnvFile:
         assert resolve_env_file(tmp_path, "alpha") is None
 
     def test_workspace_returns_workspace_env_when_present(self, tmp_path: Path) -> None:
-        (tmp_path / ".winter.workspace.env").write_text("WINTER_PORT_BASE=4000\n")
+        (tmp_path / ".winter.workspace.env").write_text("WINTER_WORKSPACE_PORT_BASE=4000\n")
         assert resolve_env_file(tmp_path, "workspace") == str(tmp_path / ".winter.workspace.env")
 
     def test_workspace_returns_none_when_absent(self, tmp_path: Path) -> None:
@@ -192,7 +192,7 @@ def _clock():
 
 class TestLifecycleForwardsEnvFile:
     def test_up_workspace_passes_workspace_env_file(self, tmp_path: Path) -> None:
-        (tmp_path / ".winter.workspace.env").write_text("WINTER_PORT_BASE=4000\n")
+        (tmp_path / ".winter.workspace.env").write_text("WINTER_WORKSPACE_PORT_BASE=4000\n")
         running = subprocess.CompletedProcess(
             [], 0, stdout='{"Service": "db", "State": "running", "Name": "wws-workspace-db-1"}', stderr=""
         )
@@ -205,7 +205,7 @@ class TestLifecycleForwardsEnvFile:
         assert all(c.source_env_file == expected for c in client.compose_calls)
 
     def test_down_workspace_passes_workspace_env_file(self, tmp_path: Path) -> None:
-        (tmp_path / ".winter.workspace.env").write_text("WINTER_PORT_BASE=4000\n")
+        (tmp_path / ".winter.workspace.env").write_text("WINTER_WORKSPACE_PORT_BASE=4000\n")
         client = FakeComposeClient(compose_results=[subprocess.CompletedProcess([], 0, stdout="", stderr="")])
         cmd_down("workspace", _manifest(["db"]), tmp_path, client)
         assert client.compose_calls[0].source_env_file == str(tmp_path / ".winter.workspace.env")

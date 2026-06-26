@@ -59,9 +59,10 @@ _WORKSPACE_COMPOSE_YAML = """\
 # winter under the <project_prefix>-workspace compose project name, once for
 # the whole workspace rather than once per feature env.
 #
-# Workspace-scoped services have no WINTER_PORT_BASE, so no WSD_PORT_* variables
-# are emitted for them.  Use fixed host ports (or omit port publishing) instead,
-# or reference ${WINTER_PORT_BASE} from the sourced .winter.workspace.env.
+# Workspace-scoped services get no WSD_PORT_* variables (that per-env auto-
+# derivation needs a per-env WINTER_PORT_BASE, which the workspace scope has not).
+# Use fixed host ports (or omit port publishing) instead, or reference
+# ${WINTER_WORKSPACE_PORT_BASE} from the sourced .winter.workspace.env.
 #
 # Named volumes declared here persist across `docker compose down` and survive
 # `winter ws destroy` (the destroy hook runs compose down but does not remove

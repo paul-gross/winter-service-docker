@@ -60,8 +60,10 @@ workspace_compose_file = "workspace-compose.yaml"
 #   Reordering these two entries would swap their ports. Alpha (port_base=4020),
 #   beta (4040), and gamma (4060) each get unique host ports automatically.
 #
-#   Workspace-scoped services have no WINTER_PORT_BASE, so no WSD_PORT_* is
-#   emitted for them — use fixed host ports in workspace-compose.yaml instead.
+#   Workspace-scoped services get no WSD_PORT_* (that per-env auto-derivation
+#   needs a per-env WINTER_PORT_BASE, which the workspace scope has not). Use
+#   fixed host ports in workspace-compose.yaml, or reference
+#   ${WINTER_WORKSPACE_PORT_BASE} from the sourced .winter.workspace.env.
 # ---------------------------------------------------------------------------
 
 [[service]]
