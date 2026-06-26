@@ -33,4 +33,4 @@ When a scope env file exists (`<env>/.winter.env`, or `<workspace>/.winter.works
 
 ## Doctor probe
 
-`workflow/doctor.sh` runs as part of `winter doctor`, checking that the docker daemon is reachable and compose v2 is installed. See `workspace:/ai/winter-cli/setup.md` for the doctor-probe contract.
+`workflow/doctor.sh` runs as part of `winter doctor`, checking that the docker daemon is reachable and compose v2 is installed. See `workspace:/ai/winter-cli/configuration/doctor.md` for the doctor-probe contract.
