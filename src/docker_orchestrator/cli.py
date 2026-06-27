@@ -5,7 +5,7 @@ Winter invokes this as::
     <entrypoint> <action> [positional...]
 
 with cwd at the workspace root and ``WINTER_*`` env vars set (see
-``ai/provider-contract.md``).
+``context/provider-contract.md``).
 
 Exit codes:
   0  — success

@@ -2,7 +2,7 @@
 
 Implements ``logs [<pattern>...] [render flags]`` using the injectable
 ``ComposeClient`` seam.  Winter forwards zero or more ``<env>/<service>`` glob
-patterns followed by the render flags (see ``ai/provider-contract.md``).
+patterns followed by the render flags (see ``context/provider-contract.md``).
 
 NDJSON line contract (one object per line on stdout):
     {"ts": "<RFC3339>", "env": "<env>", "svc": "<service>", "msg": "<line>"}

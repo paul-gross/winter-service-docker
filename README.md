@@ -57,7 +57,7 @@ A [winter](https://github.com/paul-gross/winter) extension that adds docker comp
 
 Commit `config.toml`, `environment-compose.yaml`, and `workspace-compose.yaml` to source — they are the project's service config and belong in version control.
 
-See [`index.md`](./index.md) for workspace-runtime rules, the port-substitution convention, and workspace scope. See `ai/provider-contract.md` for the docker-specific wire contract.
+See [`index.md`](./index.md) for workspace-runtime rules, the port-substitution convention, and workspace scope. See `context/provider-contract.md` for the docker-specific wire contract.
 
 ## 🔧 Manual parity
 
@@ -77,7 +77,7 @@ docker compose -p myapp-workspace \
     up -d
 ```
 
-See `ai/provider-contract.md#environment-variable-injection` for the full injection contract (which variables per scope, and precedence rules). Replace `myapp` with your actual `project_prefix`.
+See `context/provider-contract.md#environment-variable-injection` for the full injection contract (which variables per scope, and precedence rules). Replace `myapp` with your actual `project_prefix`.
 
 ## License
 

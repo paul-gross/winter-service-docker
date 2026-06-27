@@ -3,7 +3,7 @@
 Queries ``docker compose ps --all --format json`` for each target env and maps
 the docker container state/health into winter's env-keyed status document.
 
-Docker → winter state/health mapping (per ``ai/provider-contract.md``):
+Docker → winter state/health mapping (per ``context/provider-contract.md``):
   running + health=healthy   → state=running / health=healthy
   running + no healthcheck   → state=running / health=unknown
   running + health=unhealthy → state=running / health=unhealthy

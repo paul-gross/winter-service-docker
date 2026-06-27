@@ -3,7 +3,7 @@
 These primitives are used by ``status``, ``lifecycle``, and other modules.
 Extracted here so they can be imported without creating circular dependencies.
 
-Docker → winter state/health mapping (per ``ai/provider-contract.md``):
+Docker → winter state/health mapping (per ``context/provider-contract.md``):
   running + health=healthy   → state=running / health=healthy
   running + no healthcheck   → state=running / health=unknown
   running + health=unhealthy → state=running / health=unhealthy

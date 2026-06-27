@@ -1,8 +1,8 @@
 # Docker-specific provider contract for winter-service-docker
 
-This extension implements winter's **service orchestrator provider** contract. The generic wire contract (action argv, exit codes, `status` JSON shape, `logs` NDJSON shape, `describe` JSON, `WINTER_*` dispatch vars) is documented in `workspace:/ai/winter-cli/usage/service.md` — read that file first. This doc covers only what is specific to the docker compose implementation.
+This extension implements winter's **service orchestrator provider** contract. The generic wire contract (action argv, exit codes, `status` JSON shape, `logs` NDJSON shape, `describe` JSON, `WINTER_*` dispatch vars) is documented in `workspace:/context/winter-cli/usage/service.md` — read that file first. This doc covers only what is specific to the docker compose implementation.
 
-For the doctor-probe contract (NDJSON shape, `pass`/`warn`/`fail` semantics, exit-code rules), see `workspace:/ai/winter-cli/configuration/doctor.md#probe-output-contract`.
+For the doctor-probe contract (NDJSON shape, `pass`/`warn`/`fail` semantics, exit-code rules), see `workspace:/context/winter-cli/configuration/doctor.md#probe-output-contract`.
 
 ## Docker-state → winter-state/health mapping
 

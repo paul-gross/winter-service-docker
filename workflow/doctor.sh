@@ -2,7 +2,7 @@
 # Doctor probe for winter-service-docker.
 #
 # Emits NDJSON to stdout per the contract documented in
-# ai/provider-contract.md#doctor-probe. One object per line:
+# context/provider-contract.md#doctor-probe. One object per line:
 #   {"name": "...", "status": "pass|warn|fail", "message"?: "...", "remediation"?: "..."}
 #
 # Two checks:

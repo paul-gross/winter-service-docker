@@ -7,7 +7,7 @@ Each workspace config declares **two compose files** in `config.toml`:
 - `environment_compose_file` — per-env (project-scoped) services only; run under `<project_prefix>-<env>`.
 - `workspace_compose_file` — workspace-scoped singleton services only; run under `<project_prefix>-workspace`.
 
-Each file is independently runnable by hand. Winter-cli core injects `WINTER_PORT_BASE` and all `[env.vars]` entries into the provider subprocess environment before `up`, `down`, and `status` invocations — see `winter-service-docker:/ai/provider-contract.md#environment-variable-injection` for the full contract. To reproduce manually, source `winter env <scope>` first:
+Each file is independently runnable by hand. Winter-cli core injects `WINTER_PORT_BASE` and all `[env.vars]` entries into the provider subprocess environment before `up`, `down`, and `status` invocations — see `winter-service-docker:/context/provider-contract.md#environment-variable-injection` for the full contract. To reproduce manually, source `winter env <scope>` first:
 
 ```bash
 # Feature env (e.g. alpha):
@@ -35,6 +35,6 @@ The offset is the 0-based declaration order among **project-scoped** `[[service]
 
 Winter-cli core injects the full env map into the provider subprocess for `up`, `down`, and `status`. The injected set includes `WINTER_PORT_BASE`, `WINTER_WORKSPACE_PORT_BASE`, and any custom `[env.vars]` entries from the workspace `config.toml`. For `restart` and `logs`, core injects only the four base extension vars; these actions operate on already-provisioned containers and do not need `WINTER_PORT_BASE`. The compose file can reference any of these directly — `${WINTER_PORT_BASE}`, `${DATABASE_URL}`, etc. — without shell arithmetic or file sourcing. Declare workspace-level variables in `[env.vars]` so they are available to all providers for `up`/`down`/`status`.
 
-See `winter-service-docker:/ai/provider-contract.md#environment-variable-injection` for the full contract.
+See `winter-service-docker:/context/provider-contract.md#environment-variable-injection` for the full contract.
 
 See `winter-service-docker:/workflow/config.toml.example` for the annotated schema.

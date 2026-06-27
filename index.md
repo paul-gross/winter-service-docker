@@ -12,7 +12,7 @@ Files in this extension are addressed with the `winter-service-docker:` prefix �
 
 | Topic | Read when… |
 |-------|------------|
-| [Per-env isolation and port substitution](./ai/per-env-isolation.md) | …configuring `COMPOSE_PROJECT_NAME` namespacing or `WSD_PORT_*` placeholders in `environment-compose.yaml` |
-| [Workspace-scoped singleton services](./ai/workspace-singletons.md) | …running shared services (db, broker) once for the whole workspace via `winter service … workspace` |
-| [Testing changed orchestrator code](./ai/dev-loop.md) | …exercising in-progress changes via `--service-orchestrator` or the manual fallback, or checking the doctor probe contract |
-| [Provider wire contract](./ai/provider-contract.md) | …understanding docker-state → winter-state mapping, port scheme internals, or `docker logs` flag pass-through |
+| [Per-env isolation and port substitution](./context/per-env-isolation.md) | …configuring `COMPOSE_PROJECT_NAME` namespacing or `WSD_PORT_*` placeholders in `environment-compose.yaml` |
+| [Workspace-scoped singleton services](./context/workspace-singletons.md) | …running shared services (db, broker) once for the whole workspace via `winter service … workspace` |
+| [Testing changed orchestrator code](./context/dev-loop.md) | …exercising in-progress changes via `--service-orchestrator` or the manual fallback, or checking the doctor probe contract |
+| [Provider wire contract](./context/provider-contract.md) | …understanding docker-state → winter-state mapping, port scheme internals, or `docker logs` flag pass-through |
