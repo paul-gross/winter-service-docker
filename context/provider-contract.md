@@ -39,13 +39,13 @@ where `<position>` is the 0-based index of the service's `[[service]]` entry amo
 
 ## Environment variable injection
 
-Winter-cli core injects the scope's full environment into the provider subprocess for `up`, `down`, and `status`. The provider reads `WINTER_PORT_BASE` (and any `[env.vars]` entries from `config.toml`) from the process environment via `os.environ` — it does not locate, open, parse, or shell-source any per-env file.
+Winter-cli core injects the scope's full environment into the provider subprocess for `up`, `down`, and `status`. The provider reads `WINTER_PORT_BASE` (and the scope's env-var band entries from `config.toml`) from the process environment via `os.environ` — it does not locate, open, parse, or shell-source any per-env file.
 
-The injected variables include `WINTER_ENV`, `WINTER_ENV_INDEX`, `WINTER_PORT_BASE`, `WINTER_WORKSPACE_PORT_BASE`, and any custom `[env.vars]` entries declared in the workspace `config.toml`. The provider passes these through as the subprocess environment to `docker compose` alongside the computed `COMPOSE_PROJECT_NAME` and `WSD_PORT_*` values.
+The injected variables include `WINTER_ENV`, `WINTER_ENV_INDEX`, `WINTER_PORT_BASE`, `WINTER_WORKSPACE_PORT_BASE`, and the env-var band entries (`[env.workspace.vars]` / `[env.feature.vars]`) declared in the workspace `config.toml`. The provider passes these through as the subprocess environment to `docker compose` alongside the computed `COMPOSE_PROJECT_NAME` and `WSD_PORT_*` values.
 
 For `restart` and `logs`, core injects only the four base extension vars (`WINTER_WORKSPACE_DIR`, `WINTER_EXT_DIR`, `WINTER_EXT_PREFIX`, `WINTER_EXT_CONFIG_DIR`). These actions operate on already-provisioned containers and projects by name and do not need `WINTER_PORT_BASE`. Because `restart`/`logs` run without `WINTER_PORT_BASE`, `docker compose` may emit benign `"variable is not set"` warnings for `${WSD_PORT_*}`/`${WINTER_PORT_BASE}` references in the compose file; these are expected and safe to ignore — `restart`/`logs` act on already-created containers and do not re-publish ports.
 
-For `compose.yaml` interpolation of arbitrary workspace variables (e.g. `${DATABASE_URL}`, `${WTS_DB_PORT}`), declare them in the workspace `config.toml` `[env.vars]` table. Winter-cli core renders the full map and injects it into `up`, `down`, and `status` invocations.
+For `compose.yaml` interpolation of arbitrary workspace variables (e.g. `${DATABASE_URL}`, `${WTS_DB_PORT}`), declare per-env variables in `[env.feature.vars]` and shared workspace variables in `[env.workspace.vars]` in the workspace `config.toml`. Winter-cli core renders the full map and injects it into `up`, `down`, and `status` invocations.
 
 ## `docker logs` flag pass-through
 
