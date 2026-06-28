@@ -7,7 +7,7 @@ winter --service-orchestrator=/path/to/gamma/winter-service-docker service descr
 winter --service-orchestrator=/path/to/gamma/winter-service-docker service status alpha
 ```
 
-**Verifying the `status` path requires the feature core too.** `status` env enumeration lives in winter-cli core, not this provider — core computes each scope's environment and injects it on `up`, `down`, and `status`. If you are verifying a change that touches the status path, also point at the feature core with `--winter` (see `workspace:/context/winter-cli/root-flags.md`):
+**Verifying the `status` path requires the feature core too.** `status` env enumeration lives in winter-cli core, not this provider — core computes each scope's environment and injects it into the provider subprocess (see `winter-service-docker:/context/provider-contract.md#environment-variable-injection`). If you are verifying a change that touches the status path, also point at the feature core with `--winter` (see `workspace:/context/winter-cli/root-flags.md`):
 
 ```bash
 winter --winter=./alpha/winter --service-orchestrator=./alpha/winter-service-docker service status alpha
@@ -26,7 +26,7 @@ See `CONTRIBUTING.md` for the full dev-loop (lint, typecheck, test, unit-test ho
 
 ## Environment injection in the loop
 
-winter-cli core computes each scope's environment and injects it into the provider subprocess on `up`, `down`, and `status`; `restart` and `logs` receive only the four base extension vars and operate on already-provisioned containers. The provider reads the vars from `os.environ` and passes them to `docker compose` — see `winter-service-docker:/context/provider-contract.md#environment-variable-injection`. To confirm an injected var reached compose, reference it in `environment-compose.yaml` (e.g. `"${WINTER_PORT_BASE}:5432"`) and check the published host port with `docker compose ... ps` or `docker ps`.
+The provider reads injected vars from `os.environ` and passes them to `docker compose`; which vars arrive on which action is covered in `winter-service-docker:/context/provider-contract.md#environment-variable-injection`. To confirm an injected var reached compose, reference it in `environment-compose.yaml` (e.g. `"${WINTER_PORT_BASE}:5432"`) and check the published host port with `docker compose ... ps` or `docker ps`.
 
 ## Doctor probe
 

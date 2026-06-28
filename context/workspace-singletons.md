@@ -17,7 +17,7 @@ winter service restart workspace/db  # restart a single workspace service
 
 The `workspace` token is an exact reserved name — `work*` globs do NOT match it.
 
-Named volumes declared in `workspace-compose.yaml` persist across `compose down`. Remove them explicitly with `docker volume rm ...` if you want a clean slate.
+Named volumes declared in `workspace-compose.yaml` persist across `compose down` — see `winter-service-docker:/context/provider-contract.md#workspace-scope-model-and-named-volumes` for the persistence model and how to clear them.
 
 ## Declaring workspace services
 
@@ -35,7 +35,7 @@ scope = "workspace"
 
 Key points:
 - **Global name namespace** — names are unique across both scopes; a project and a workspace service may not share a name.
-- **Ports come from the injected `WINTER_WORKSPACE_PORT_BASE`** — workspace services get no `WSD_PORT_*` (that auto-derivation is a per-env convenience). Instead core injects `WINTER_WORKSPACE_PORT_BASE` (the index-0 band, e.g. `4000`) into the provider environment for the workspace scope, so `workspace-compose.yaml` references `${WINTER_WORKSPACE_PORT_BASE}` directly — `ports: ["${WINTER_WORKSPACE_PORT_BASE}:5432"]` publishes on `4000`, never colliding with a feature env. Declare any additional workspace service ports in the workspace `config.toml` `[env.workspace.vars]` table. See `winter-service-docker:/context/provider-contract.md#environment-variable-injection` for the injection contract.
+- **Ports come from the injected `WINTER_WORKSPACE_PORT_BASE`** — workspace services get no `WSD_PORT_*`; reference `${WINTER_WORKSPACE_PORT_BASE}` directly in `workspace-compose.yaml` (e.g. `ports: ["${WINTER_WORKSPACE_PORT_BASE}:5432"]`), and declare any additional workspace service ports in the workspace `config.toml` `[env.workspace.vars]` table. For why workspace services are excluded from `WSD_PORT_*` derivation and how the scope env is injected, see `winter-service-docker:/context/provider-contract.md#workspace-scope-model-and-named-volumes`.
 - **Workspace services are excluded from per-env `up`** — `winter service up alpha` starts only project-scoped services; workspace services are never included in a per-env compose invocation.
 - **Validation** — the loader enforces globally unique names across both scopes and rejects unknown scope values at parse time.
 

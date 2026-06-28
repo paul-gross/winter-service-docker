@@ -1,6 +1,6 @@
 # Docker-specific provider contract for winter-service-docker
 
-This extension implements winter's **service orchestrator provider** contract. The generic wire contract (action argv, exit codes, `status` JSON shape, `logs` NDJSON shape, `describe` JSON, `WINTER_*` dispatch vars) is documented in `workspace:/context/winter-cli/usage/service.md` — read that file first. This doc covers only what is specific to the docker compose implementation.
+This extension implements winter's **service orchestrator provider** contract. Read the canonical contract first — `workspace:/context/winter-cli/contracts/service-orchestrator.md` owns the generic wire contract; consult it whenever you need the action argv, exit codes, the `status`/`describe` JSON shapes, the `logs` NDJSON shape, or the `WINTER_*` dispatch-var rules. This doc is the docker-specific overlay on top of that contract — it covers only what is specific to the docker compose implementation.
 
 For the doctor-probe contract (NDJSON shape, `pass`/`warn`/`fail` semantics, exit-code rules), see `workspace:/context/winter-cli/configuration/doctor.md#probe-output-contract`.
 
@@ -39,13 +39,10 @@ where `<position>` is the 0-based index of the service's `[[service]]` entry amo
 
 ## Environment variable injection
 
-Winter-cli core injects the scope's full environment into the provider subprocess for `up`, `down`, and `status`. The provider reads `WINTER_PORT_BASE` (and the scope's env-var band entries from `config.toml`) from the process environment via `os.environ` — it does not locate, open, parse, or shell-source any per-env file.
+Which `WINTER_*` vars (and computed env-band entries) core injects on each action is owned by `workspace:/context/winter-cli/contracts/service-orchestrator.md#always-present-environment-variables` — the scope vars (`WINTER_ENV`, `WINTER_ENV_INDEX`, `WINTER_PORT_BASE`, `WINTER_WORKSPACE_PORT_BASE`, plus the band entries) land on `up`/`down`/`status`, while `restart` and `logs` receive only the four base extension vars. This provider's docker-specific behavior over that contract:
 
-The injected variables include `WINTER_ENV`, `WINTER_ENV_INDEX`, `WINTER_PORT_BASE`, `WINTER_WORKSPACE_PORT_BASE`, and the env-var band entries (`[env.workspace.vars]` / `[env.feature.vars]`) declared in the workspace `config.toml`. The provider passes these through as the subprocess environment to `docker compose` alongside the computed `COMPOSE_PROJECT_NAME` and `WSD_PORT_*` values.
-
-For `restart` and `logs`, core injects only the four base extension vars (`WINTER_WORKSPACE_DIR`, `WINTER_EXT_DIR`, `WINTER_EXT_PREFIX`, `WINTER_EXT_CONFIG_DIR`). These actions operate on already-provisioned containers and projects by name and do not need `WINTER_PORT_BASE`. Because `restart`/`logs` run without `WINTER_PORT_BASE`, `docker compose` may emit benign `"variable is not set"` warnings for `${WSD_PORT_*}`/`${WINTER_PORT_BASE}` references in the compose file; these are expected and safe to ignore — `restart`/`logs` act on already-created containers and do not re-publish ports.
-
-For `compose.yaml` interpolation of arbitrary workspace variables (e.g. `${DATABASE_URL}`, `${WTS_DB_PORT}`), declare per-env variables in `[env.feature.vars]` and shared workspace variables in `[env.workspace.vars]` in the workspace `config.toml`. Winter-cli core renders the full map and injects it into `up`, `down`, and `status` invocations.
+- It reads the injected vars from the process environment via `os.environ` — it does not locate, open, parse, or shell-source any per-env file — and passes them through as the subprocess environment to `docker compose` alongside the computed `COMPOSE_PROJECT_NAME` and `WSD_PORT_*` values. Arbitrary workspace variables referenced in the compose file (e.g. `${DATABASE_URL}`, `${WTS_DB_PORT}`) interpolate the same way; declare them in `[env.feature.vars]` / `[env.workspace.vars]` in the workspace `config.toml`.
+- Because `restart`/`logs` run without `WINTER_PORT_BASE`, `docker compose` may emit benign `"variable is not set"` warnings for `${WSD_PORT_*}`/`${WINTER_PORT_BASE}` references in the compose file; these are expected and safe to ignore — `restart`/`logs` act on already-created containers and do not re-publish ports.
 
 ## `docker logs` flag pass-through
 

@@ -23,18 +23,14 @@ The orchestrator selects the correct file by scope at runtime so `up/down/restar
 
 ## COMPOSE_PROJECT_NAME namespacing
 
-Every compose invocation sets `COMPOSE_PROJECT_NAME=<project_prefix>-<env>` (e.g. `myapp-alpha`, `myapp-beta`). This namespaces all containers, networks, and volumes per env so two feature environments never conflict on the same docker host.
+The orchestrator namespaces every compose project per env, so two feature environments never conflict on the same docker host — no authoring step is required. For the `<project_prefix>-<env>` naming scheme, see `winter-service-docker:/context/provider-contract.md#compose_project_name-namespacing`.
 
 ## WSD_PORT_* port-substitution convention
 
-Published host ports in `environment-compose.yaml` should use `${WSD_PORT_<NAME>}` placeholders (where `<NAME>` is the upper-cased service name). `winter-service-docker` derives per-env ports from `WINTER_PORT_BASE` (injected into the provider subprocess environment by winter-cli core) so host ports are unique across envs.
-
-The offset is the 0-based declaration order among **project-scoped** `[[service]]` entries in `config.toml` — i.e. `WSD_PORT_<NAME> = WINTER_PORT_BASE + <position>` (workspace-scoped entries are excluded from port assignment because they have no `WINTER_PORT_BASE`). **Reordering project entries reassigns ports.** Example: with `WINTER_PORT_BASE=4060` (gamma env), the first declared project service gets `4060`, the second `4061`. Alpha (port_base=4020) and beta (4040) get different host ports automatically.
+Publish host ports in `environment-compose.yaml` with `${WSD_PORT_<NAME>}` placeholders (where `<NAME>` is the upper-cased service name); the orchestrator derives a unique per-env value for each, so host ports never collide across envs. For the derivation formula (declaration-order offset, workspace exclusion, the reordering caveat), see `winter-service-docker:/context/provider-contract.md#wsd_port_-port-substitution-scheme`.
 
 ## Environment variable injection
 
-Winter-cli core injects the full env map into the provider subprocess for `up`, `down`, and `status`. The injected set includes `WINTER_PORT_BASE`, `WINTER_WORKSPACE_PORT_BASE`, and the scope's env-var band entries (`[env.workspace.vars]` / `[env.feature.vars]`) from the workspace `config.toml`. For `restart` and `logs`, core injects only the four base extension vars; these actions operate on already-provisioned containers and do not need `WINTER_PORT_BASE`. The compose file can reference any of these directly — `${WINTER_PORT_BASE}`, `${DATABASE_URL}`, etc. — without shell arithmetic or file sourcing. Declare workspace-level variables in `[env.workspace.vars]` so they are available to all providers for `up`/`down`/`status`.
-
-See `winter-service-docker:/context/provider-contract.md#environment-variable-injection` for the full contract.
+The compose file can reference any injected variable directly — `${WINTER_PORT_BASE}`, `${DATABASE_URL}`, etc. — without shell arithmetic or file sourcing. Declare workspace-level variables in `[env.workspace.vars]` and per-env variables in `[env.feature.vars]` in the workspace `config.toml`. For which variables are injected on which actions, see `winter-service-docker:/context/provider-contract.md#environment-variable-injection`.
 
 See `winter-service-docker:/workflow/config.toml.example` for the annotated schema.
