@@ -6,6 +6,10 @@ Docker compose-based service orchestration for winter workspaces. Maps `winter s
 
 Files in this extension are addressed with the `winter-service-docker:` prefix — for example, `winter-service-docker:/index.md`. Resolve to the on-disk path via the `# Winter Extensions` block in workspace `CLAUDE.md`.
 
+## Feature environment setup steps
+
+This extension needs a project-specific `config.toml` and two compose files (`environment-compose.yaml` for per-env services, `workspace-compose.yaml` for workspace singletons) wired to your project's services. After `winter ws init` clones the extension, walk the user through [context/workflow-setup.md](./context/workflow-setup.md) to scaffold and populate `workspace:/.winter/config/winter-service-docker/`. Without these, `winter service up <env>` has no services to start.
+
 ## What this extension provides
 
 `winter-service-docker` implements winter's `service` capability slot using `docker compose`. Declare it in `.winter/config.toml` alongside (or instead of) `winter-service-tmux`. Because this provider reports real container health via docker's healthcheck, `winter service up <env> --wait` is a genuine readiness gate. See `README.md` for installation steps.
