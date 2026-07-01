@@ -390,7 +390,14 @@ def test_cmd_logs_follow_broken_pipe_returns_0(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_cmd_logs_missing_prefix_returns_1(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_cmd_logs_missing_prefix_returns_1(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Edge case: logs has no project-name prefix source when neither the manifest
+    override nor WINTER_SERVICE_PREFIX is set. WINTER_SERVICE_PREFIX is a base
+    extension var normally present on every dispatch action (including logs); this
+    only happens if it's absent from the process environment entirely."""
+    monkeypatch.delenv("WINTER_SERVICE_PREFIX", raising=False)
     manifest = DockerManifest(
         project_prefix=None,
         environment_compose_file="compose.yaml",
@@ -403,7 +410,7 @@ def test_cmd_logs_missing_prefix_returns_1(tmp_path: Path, capsys: pytest.Captur
     rc = cmd_logs(["alpha/db"], manifest, client, sink=sink)
 
     assert rc == 1
-    assert "manifest is missing" in capsys.readouterr().err
+    assert "no project-name prefix available" in capsys.readouterr().err
 
 
 def test_cmd_logs_missing_compose_file_returns_1(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

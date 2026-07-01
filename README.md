@@ -26,7 +26,7 @@ A [winter](https://github.com/paul-gross/winter) extension that adds docker comp
 
    This creates three files: `environment-compose.yaml` (per-env services), `workspace-compose.yaml` (workspace singletons), and `config.toml`.
 
-2. **Edit `config.toml`** — set `project_prefix`, update `environment_compose_file` and `workspace_compose_file` if needed, and list your `[[service]]` entries.
+2. **Edit `config.toml`** — update `environment_compose_file` and `workspace_compose_file` if needed, and list your `[[service]]` entries. The compose project prefix is controlled entirely by the workspace's `WINTER_SERVICE_PREFIX` (from `service_prefix` in `.winter/config.toml`) — nothing to configure here. (`project_prefix` is a purely optional per-provider override for the rare case where this provider needs a prefix different from the rest of the workspace; see `context/provider-contract.md#compose_project_name-namespacing`.)
 
 3. **Edit `environment-compose.yaml`** — per-env services; use `${WSD_PORT_<NAME>}` for published ports.
 
@@ -64,7 +64,7 @@ See [`index.md`](./index.md) for workspace-runtime rules, the port-substitution 
 Each scope-pure compose file is independently runnable by hand. The orchestrator runs compose with the scope's environment injected by winter-cli core (not `--env-file`), so `${VAR}` references in the compose file resolve against the injected vars. To reproduce the same environment by hand, source it from `winter env <scope>`:
 
 ```bash
-# Per-env services (e.g. alpha env, project_prefix=myapp):
+# Per-env services (e.g. alpha env, WINTER_SERVICE_PREFIX=myapp):
 source <(winter env alpha)
 docker compose -p myapp-alpha \
     -f .winter/config/winter-service-docker/environment-compose.yaml \
@@ -77,7 +77,7 @@ docker compose -p myapp-workspace \
     up -d
 ```
 
-See `context/provider-contract.md#environment-variable-injection` for the full injection contract (which variables per scope, and precedence rules). Replace `myapp` with your actual `project_prefix`.
+See `context/provider-contract.md#environment-variable-injection` for the full injection contract (which variables per scope, and precedence rules). Replace `myapp` with your workspace's resolved `WINTER_SERVICE_PREFIX` (or your `config.toml`'s `project_prefix` override, if set).
 
 ## License
 

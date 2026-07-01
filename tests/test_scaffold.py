@@ -41,9 +41,12 @@ class TestScaffoldFunction:
         assert "volumes:" in content, "workspace-compose.yaml must declare a named volume section"
 
     def test_config_toml_has_project_prefix(self, tmp_path: Path) -> None:
+        """project_prefix is documented as a commented-out optional override — it is
+        not set by default (issue #5: the prefix defaults to WINTER_SERVICE_PREFIX)."""
         scaffold(tmp_path)
         content = (tmp_path / "config.toml").read_text()
         assert "project_prefix" in content
+        assert '# project_prefix = "myapp"' in content
 
     def test_config_toml_has_environment_compose_file(self, tmp_path: Path) -> None:
         scaffold(tmp_path)

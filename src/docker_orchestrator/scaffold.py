@@ -29,8 +29,10 @@ _ENVIRONMENT_COMPOSE_YAML = """\
 # Starter environment-compose.yaml for winter-service-docker.
 #
 # This file contains ONLY per-env (project-scoped) services.  It is run by
-# winter under the <project_prefix>-<env> compose project name so each feature
-# environment gets isolated containers, networks, and ports.
+# winter under the <prefix>-<env> compose project name (<prefix> comes from
+# the workspace's WINTER_SERVICE_PREFIX, or config.toml's project_prefix
+# override) so each feature environment gets isolated containers, networks,
+# and ports.
 #
 # Port substitution uses ${WSD_PORT_<NAME>} placeholders.  winter-service-docker
 # resolves WSD_PORT_<NAME> = WINTER_PORT_BASE + <position> at runtime, where
@@ -56,8 +58,8 @@ _WORKSPACE_COMPOSE_YAML = """\
 # Starter workspace-compose.yaml for winter-service-docker.
 #
 # This file contains ONLY workspace-scoped singleton services.  It is run by
-# winter under the <project_prefix>-workspace compose project name, once for
-# the whole workspace rather than once per feature env.
+# winter under the <prefix>-workspace compose project name, once for the whole
+# workspace rather than once per feature env.
 #
 # Workspace-scoped services get no WSD_PORT_* variables (that per-env auto-
 # derivation needs a per-env WINTER_PORT_BASE, which the workspace scope has not).
@@ -108,9 +110,15 @@ _CONFIG_TOML = """\
 # Validate with:
 #   winter ext verify <ext-dir>
 
-# Prefix for COMPOSE_PROJECT_NAME: <project_prefix>-<env>
+# Prefix for COMPOSE_PROJECT_NAME: <prefix>-<env>
 # e.g. "myapp" produces "myapp-alpha", "myapp-beta", "myapp-workspace"
-project_prefix = "myapp"
+#
+# The prefix comes from the workspace-level `service_prefix` config
+# (`.winter/config.toml`), injected into this provider as WINTER_SERVICE_PREFIX
+# on every dispatch action — nothing to set here. project_prefix below is a
+# purely optional, hand-edited override for the rare case where this
+# provider needs a different prefix than the rest of the workspace.
+# project_prefix = "myapp"
 
 # Path to the compose file for per-env (project-scoped) services.
 # Contains only project-scoped services; independently runnable by hand.
@@ -132,10 +140,10 @@ workspace_compose_file = "workspace-compose.yaml"
 #                      `winter service logs` patterns.  Names are globally
 #                      unique across both scopes.
 #   scope (optional, default "project") — "project" runs the service in the
-#                      per-env <project_prefix>-<env> compose project (declared
+#                      per-env <prefix>-<env> compose project (declared
 #                      in environment_compose_file); "workspace" makes it a
 #                      workspace-scoped singleton that runs in
-#                      <project_prefix>-workspace (declared in
+#                      <prefix>-workspace (declared in
 #                      workspace_compose_file, shared across all feature envs).
 #                      Drive workspace services with `winter service up/down workspace`.
 #
@@ -154,10 +162,10 @@ workspace_compose_file = "workspace-compose.yaml"
 
 [[service]]
 name = "backend"
-# scope = "project"  # default — runs per-env in <project_prefix>-<env>
+# scope = "project"  # default — runs per-env in <prefix>-<env>
 
 [[service]]
-# Workspace-scoped singleton: runs once in <project_prefix>-workspace,
+# Workspace-scoped singleton: runs once in <prefix>-workspace,
 # shared across all feature envs.  No WSD_PORT_DB is emitted — use a
 # fixed host port in workspace-compose.yaml instead.
 name = "db"
@@ -240,7 +248,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"wrote {path}")
     print(
         f"\nNext steps:\n"
-        f"  1. Edit {dest / 'config.toml'} — set project_prefix and list your services.\n"
+        f"  1. Edit {dest / 'config.toml'} — list your services. The compose project "
+        f"prefix is controlled by the workspace's WINTER_SERVICE_PREFIX; nothing to set here.\n"
         f"  2. Edit {dest / 'environment-compose.yaml'} — per-env services and ports.\n"
         f"  3. Edit {dest / 'workspace-compose.yaml'} — workspace singleton services.\n"
         f"  4. Register: add '[capabilities] service = \"winter-service-docker\"'\n"

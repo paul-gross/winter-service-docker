@@ -26,6 +26,8 @@ from docker_orchestrator.env_context import (
     compose_project_name,
     published_port,
     read_port_base,
+    read_service_prefix,
+    resolve_project_prefix,
 )
 from docker_orchestrator.manifest import DockerManifest, ServiceDecl
 from docker_orchestrator.manifest import load as load_manifest
@@ -88,6 +90,59 @@ def test_read_port_base_custom_value(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("WINTER_PORT_BASE", "4100")
     base = read_port_base()
     assert base == 4100
+
+
+# ---------------------------------------------------------------------------
+# 2b. WINTER_SERVICE_PREFIX resolution (issue #5)
+# ---------------------------------------------------------------------------
+
+
+def test_read_service_prefix_present(monkeypatch: pytest.MonkeyPatch) -> None:
+    """read_service_prefix returns WINTER_SERVICE_PREFIX from os.environ."""
+    monkeypatch.setenv("WINTER_SERVICE_PREFIX", "myapp")
+    assert read_service_prefix() == "myapp"
+
+
+def test_read_service_prefix_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When WINTER_SERVICE_PREFIX is not in the environment, returns None."""
+    monkeypatch.delenv("WINTER_SERVICE_PREFIX", raising=False)
+    assert read_service_prefix() is None
+
+
+def test_read_service_prefix_empty_treated_as_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An empty WINTER_SERVICE_PREFIX value is treated as absent."""
+    monkeypatch.setenv("WINTER_SERVICE_PREFIX", "")
+    assert read_service_prefix() is None
+
+
+def test_resolve_project_prefix_defaults_to_service_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With no manifest override, resolve_project_prefix falls back to WINTER_SERVICE_PREFIX."""
+    monkeypatch.setenv("WINTER_SERVICE_PREFIX", "winter")
+    assert resolve_project_prefix(None) == "winter"
+
+
+def test_resolve_project_prefix_manifest_override_takes_precedence(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An explicit manifest project_prefix override wins over WINTER_SERVICE_PREFIX."""
+    monkeypatch.setenv("WINTER_SERVICE_PREFIX", "winter")
+    assert resolve_project_prefix("myapp") == "myapp"
+
+
+def test_resolve_project_prefix_none_when_neither_source_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Absent manifest override and absent WINTER_SERVICE_PREFIX resolves to None."""
+    monkeypatch.delenv("WINTER_SERVICE_PREFIX", raising=False)
+    assert resolve_project_prefix(None) is None
+
+
+def test_build_env_context_prefix_from_resolve_project_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
+    """build_env_context combined with resolve_project_prefix derives COMPOSE_PROJECT_NAME
+    from WINTER_SERVICE_PREFIX when no manifest override is configured."""
+    monkeypatch.setenv("WINTER_SERVICE_PREFIX", "myapp")
+    monkeypatch.setenv("WINTER_PORT_BASE", "4020")
+    prefix = resolve_project_prefix(None)
+    assert prefix is not None
+    ctx = build_env_context("alpha", prefix)
+    assert ctx.compose_project_name == "myapp-alpha"
+    assert ctx.port_base == 4020
 
 
 # ---------------------------------------------------------------------------

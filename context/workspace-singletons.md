@@ -1,6 +1,6 @@
 # Workspace-scoped singleton services
 
-Some services — a shared database, a container registry, a message broker — should run once for the whole workspace rather than once per feature env. The orchestrator supports this via a dedicated `<project_prefix>-workspace` compose project, separate from every per-env project.
+Some services — a shared database, a container registry, a message broker — should run once for the whole workspace rather than once per feature env. The orchestrator supports this via a dedicated `<prefix>-workspace` compose project, separate from every per-env project.
 
 ## Driving the workspace scope
 

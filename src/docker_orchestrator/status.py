@@ -39,7 +39,7 @@ from docker_orchestrator.compose_ps import (
     map_docker_state,
     parse_compose_ps_output,
 )
-from docker_orchestrator.env_context import WORKSPACE_SCOPE
+from docker_orchestrator.env_context import WORKSPACE_SCOPE, resolve_project_prefix
 from docker_orchestrator.env_context import compose_project_name as _compose_project_name
 from docker_orchestrator.manifest import DockerManifest
 from docker_orchestrator.patterns import envs_from_patterns, has_glob, service_matches_any_pattern
@@ -171,9 +171,12 @@ def _status_for_env(
     """
     # Require manifest fields
     compose_file = manifest.compose_file_for_scope(env)
-    if not manifest.project_prefix or not compose_file:
+    prefix = resolve_project_prefix(manifest.project_prefix)
+    if not prefix or not compose_file:
         print(
-            f"docker-orchestrator: status: manifest is missing project_prefix or compose file for scope of env '{env}'",
+            "docker-orchestrator: status: no project-name prefix available "
+            "(set WINTER_SERVICE_PREFIX or config.toml's project_prefix override) "
+            f"or missing compose file for scope of env '{env}'",
             file=sys.stderr,
         )
         return {
@@ -196,7 +199,7 @@ def _status_for_env(
         with contextlib.suppress(ValueError):
             port_base = int(raw_port_base)
 
-    project_name = _compose_project_name(manifest.project_prefix, env)
+    project_name = _compose_project_name(prefix, env)
     scoped_services = manifest.services_for_scope(env)
     compose_env = _build_status_compose_env(project_name, scoped_services, port_base)
 

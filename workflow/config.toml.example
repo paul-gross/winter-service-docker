@@ -11,10 +11,17 @@
 #   PYTHONPATH=src python3 -m docker_orchestrator.scaffold <dest-dir>
 
 # Prefix for COMPOSE_PROJECT_NAME.  Each env's compose project is named
-# <project_prefix>-<env> (e.g. "myapp-alpha", "myapp-beta") so containers,
+# <prefix>-<env> (e.g. "myapp-alpha", "myapp-beta") so containers,
 # networks, and volumes are automatically namespaced per env and never collide.
-# The workspace scope uses <project_prefix>-workspace.
-project_prefix = "myapp"
+# The workspace scope uses <prefix>-workspace.
+#
+# <prefix> is controlled by the workspace-level WINTER_SERVICE_PREFIX,
+# injected by winter-cli core (resolved from `service_prefix` in the
+# workspace's .winter/config.toml) on every dispatch action, including
+# restart/logs — nothing to configure here. project_prefix below is a
+# purely optional, hand-edited override: only relevant if this provider
+# needs a different prefix than the rest of the workspace.
+# project_prefix = "myapp"
 
 # Path to the compose file for per-env (project-scoped) services.
 # Contains ONLY project-scoped services — independently runnable by hand
@@ -37,10 +44,10 @@ workspace_compose_file = "workspace-compose.yaml"
 #   name  (required) — unique identifier used in restart and logs patterns.
 #                      Names are globally unique across both scopes.
 #   scope (optional, default "project") — "project" runs the service in the
-#                      per-env <project_prefix>-<env> compose project (declared
+#                      per-env <prefix>-<env> compose project (declared
 #                      in environment_compose_file); "workspace" makes it a
 #                      workspace-scoped singleton that runs in
-#                      <project_prefix>-workspace (declared in
+#                      <prefix>-workspace (declared in
 #                      workspace_compose_file, shared across all feature envs).
 #                      Drive workspace services with
 #                      `winter service up/down workspace`.
@@ -68,18 +75,18 @@ workspace_compose_file = "workspace-compose.yaml"
 
 [[service]]
 name = "backend"
-# scope = "project"  # default — runs per-env in <project_prefix>-<env>
+# scope = "project"  # default — runs per-env in <prefix>-<env>
 
 [[service]]
 name = "worker"
-# scope = "project"  # default — runs per-env in <project_prefix>-<env>
+# scope = "project"  # default — runs per-env in <prefix>-<env>
 
 # ---------------------------------------------------------------------------
 # Workspace-scoped singleton services
 # ---------------------------------------------------------------------------
 #
 # A [[service]] entry with scope = "workspace" runs in a SEPARATE compose
-# project named <project_prefix>-workspace, created once for the whole
+# project named <prefix>-workspace, created once for the whole
 # workspace rather than once per feature env.  These are shared across all
 # feature environments and are intended for long-running infrastructure that
 # should not be duplicated per-env (e.g. a shared database, a registry).
@@ -87,15 +94,15 @@ name = "worker"
 # scope is the only field that distinguishes a workspace singleton from a
 # per-env service:
 #   scope = "project"   (DEFAULT, may be omitted) — per-env service, runs in
-#                       the <project_prefix>-<env> compose project.
-#   scope = "workspace" — workspace singleton, runs in <project_prefix>-workspace.
+#                       the <prefix>-<env> compose project.
+#   scope = "workspace" — workspace singleton, runs in <prefix>-workspace.
 # The name field is declared the same way as for any project service.
 #
 # Name uniqueness is GLOBAL across both scopes — a project and a workspace
 # service may not share a name.
 
 [[service]]
-# Shared database singleton — runs once in <project_prefix>-workspace.
+# Shared database singleton — runs once in <prefix>-workspace.
 # No WSD_PORT_DB is emitted; use a fixed port in workspace-compose.yaml.
 name = "db"
 scope = "workspace"

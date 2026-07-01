@@ -51,7 +51,7 @@ import sys
 from typing import IO
 
 from docker_orchestrator.compose_client import IComposeClient
-from docker_orchestrator.env_context import build_env_context
+from docker_orchestrator.env_context import build_env_context, resolve_project_prefix
 from docker_orchestrator.manifest import DockerManifest
 from docker_orchestrator.patterns import envs_from_patterns, service_matches_any_pattern
 
@@ -272,9 +272,12 @@ def cmd_logs(
     """
     out: IO[str] = sink if sink is not None else sys.stdout
 
-    if not manifest.project_prefix:
+    prefix = resolve_project_prefix(manifest.project_prefix)
+    if not prefix:
         print(
-            "docker-orchestrator: logs: manifest is missing project_prefix",
+            "docker-orchestrator: logs: no project-name prefix available. "
+            "WINTER_SERVICE_PREFIX was not found in the process environment; "
+            "set config.toml's project_prefix as an explicit override.",
             file=sys.stderr,
         )
         return 1
@@ -306,7 +309,7 @@ def cmd_logs(
             )
             worst = max(worst, 1)
             continue
-        ctx = build_env_context(env, manifest.project_prefix)
+        ctx = build_env_context(env, prefix)
         log_args = _build_log_args(
             svc,
             follow=follow,

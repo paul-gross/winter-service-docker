@@ -4,8 +4,8 @@
 
 Each workspace config declares **two compose files** in `config.toml`:
 
-- `environment_compose_file` — per-env (project-scoped) services only; run under `<project_prefix>-<env>`.
-- `workspace_compose_file` — workspace-scoped singleton services only; run under `<project_prefix>-workspace`.
+- `environment_compose_file` — per-env (project-scoped) services only; run under `<prefix>-<env>`.
+- `workspace_compose_file` — workspace-scoped singleton services only; run under `<prefix>-workspace`.
 
 Each file is independently runnable by hand. Winter-cli core injects `WINTER_PORT_BASE` and the scope's env-var band entries (`[env.workspace.vars]` / `[env.feature.vars]`) into the provider subprocess environment before `up`, `down`, and `status` invocations — see `winter-service-docker:/context/provider-contract.md#environment-variable-injection` for the full contract. To reproduce manually, source `winter env <scope>` first:
 
@@ -23,7 +23,7 @@ The orchestrator selects the correct file by scope at runtime so `up/down/restar
 
 ## COMPOSE_PROJECT_NAME namespacing
 
-The orchestrator namespaces every compose project per env, so two feature environments never conflict on the same docker host — no authoring step is required. For the `<project_prefix>-<env>` naming scheme, see `winter-service-docker:/context/provider-contract.md#compose_project_name-namespacing`.
+The orchestrator namespaces every compose project per env, so two feature environments never conflict on the same docker host — no authoring step is required. The prefix is controlled by the workspace-level `WINTER_SERVICE_PREFIX` (injected by winter-cli core on every dispatch action, including `restart`/`logs`); `config.toml`'s `project_prefix` key is a purely optional override, only relevant for the rare case where this provider needs a prefix independent of the rest of the workspace. For the full `<prefix>-<env>` naming scheme, see `winter-service-docker:/context/provider-contract.md#compose_project_name-namespacing`.
 
 ## WSD_PORT_* port-substitution convention
 

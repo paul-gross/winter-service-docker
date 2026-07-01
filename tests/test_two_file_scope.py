@@ -441,7 +441,9 @@ class TestScaffoldTwoFiles:
         import docker_orchestrator.manifest as manifest_mod
 
         manifest = manifest_mod.load(tmp_path)
-        assert manifest.project_prefix == "myapp"
+        # project_prefix is commented out in the scaffolded config — it is an
+        # optional override, the default source is WINTER_SERVICE_PREFIX (issue #5).
+        assert manifest.project_prefix is None
         assert manifest.environment_compose_file is not None
         assert manifest.workspace_compose_file is not None
 

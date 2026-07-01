@@ -6,9 +6,19 @@ var is unset.
 
 Manifest schema (``config.toml``):
 
-    project_prefix          = "myapp"                  # required
+    project_prefix          = "myapp"                  # optional override
     environment_compose_file = "environment-compose.yaml"  # required — per-env services
     workspace_compose_file   = "workspace-compose.yaml"    # required — workspace singletons
+
+``project_prefix`` is optional. When set, it is an explicit per-provider
+override for the ``COMPOSE_PROJECT_NAME`` prefix, taking precedence over the
+core-injected ``WINTER_SERVICE_PREFIX`` environment variable (see
+``docker_orchestrator.env_context.resolve_project_prefix``). The prefix is
+controlled by the workspace-level ``service_prefix`` config and is present on
+every dispatch action (including ``restart``/``logs``); ``project_prefix``
+should be left unset except as a hand-edited escape hatch for a per-provider
+prefix collision, where this provider needs a different prefix than the rest
+of the workspace.
 
     [[service]]
     name = "backend"                  # optional list of declared services
@@ -21,7 +31,7 @@ Config dir is resolved at call time; the reader is stateless and re-reads on
 every ``load()`` call (no caching — callers may invoke once and hold the result).
 
 Missing config dir or absent ``config.toml`` → ``DockerManifest`` with empty
-service list and ``None`` for required fields (graceful degradation used by
+service list and ``None`` for all fields (graceful degradation used by
 ``describe`` to emit ``{"services": []}``.
 """
 
@@ -48,10 +58,15 @@ class ServiceDecl:
 class DockerManifest:
     """The parsed extension manifest.
 
-    ``project_prefix``, ``environment_compose_file``, and
-    ``workspace_compose_file`` are ``None`` when the config file is absent or
-    the field is missing — callers that require these fields should check and
-    emit a useful error.
+    ``project_prefix`` is an optional per-provider override for the
+    ``COMPOSE_PROJECT_NAME`` prefix (see module docstring); it is ``None``
+    when not set in ``config.toml``, in which case callers fall back to the
+    core-injected ``WINTER_SERVICE_PREFIX`` via
+    ``docker_orchestrator.env_context.resolve_project_prefix``.
+
+    ``environment_compose_file`` and ``workspace_compose_file`` are ``None``
+    when the config file is absent or the field is missing — callers that
+    require these fields should check and emit a useful error.
 
     ``services`` holds project-scoped services (``scope = "project"``).
     ``workspace_services`` holds workspace-scoped services (``scope = "workspace"``).

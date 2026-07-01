@@ -198,7 +198,14 @@ def test_cmd_restart_wildcard_env_no_concrete_returns_1(tmp_path: Path, capsys: 
 # ---------------------------------------------------------------------------
 
 
-def test_cmd_restart_missing_prefix_returns_1(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_cmd_restart_missing_prefix_returns_1(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Edge case: restart has no project-name prefix source when neither the manifest
+    override nor WINTER_SERVICE_PREFIX is set. WINTER_SERVICE_PREFIX is a base
+    extension var normally present on every dispatch action (including restart); this
+    only happens if it's absent from the process environment entirely."""
+    monkeypatch.delenv("WINTER_SERVICE_PREFIX", raising=False)
     manifest = DockerManifest(
         project_prefix=None,
         environment_compose_file="compose.yaml",
@@ -210,7 +217,7 @@ def test_cmd_restart_missing_prefix_returns_1(tmp_path: Path, capsys: pytest.Cap
     rc = cmd_restart(["alpha/db"], manifest, client)
 
     assert rc == 1
-    assert "manifest is missing" in capsys.readouterr().err
+    assert "no project-name prefix available" in capsys.readouterr().err
 
 
 def test_cmd_restart_missing_compose_file_returns_1(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

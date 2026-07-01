@@ -41,7 +41,7 @@ from tests.fakes import FakeComposeClient
 
 
 def _make_manifest(
-    prefix: str = "myapp", compose_file: str = "compose.yaml", services: list[str] | None = None
+    prefix: str | None = "myapp", compose_file: str = "compose.yaml", services: list[str] | None = None
 ) -> DockerManifest:
     svcs = tuple(ServiceDecl(name=s) for s in (services or []))
     return DockerManifest(
@@ -579,6 +579,32 @@ def test_cmd_status_compose_called_with_project_name(tmp_workspace: Path, capsys
     call = fake.compose_calls[0]
     assert call.project == "proj-alpha"
     assert call.args == ["ps", "--all", "--format", "json"]
+
+
+def test_cmd_status_uses_winter_service_prefix_when_no_manifest_override(
+    tmp_workspace: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """status derives COMPOSE_PROJECT_NAME from WINTER_SERVICE_PREFIX when the
+    manifest has no project_prefix override (issue #5)."""
+    monkeypatch.setenv("WINTER_SERVICE_PREFIX", "envprefix")
+    fake = _fake_client_ps([])
+    manifest = _make_manifest(prefix=None, services=["db"])
+    rc = cmd_status(patterns=["alpha"], manifest=manifest, client=fake)
+    assert rc == 0
+    call = fake.compose_calls[0]
+    assert call.project == "envprefix-alpha"
+
+
+def test_cmd_status_manifest_override_takes_precedence_over_winter_service_prefix(
+    tmp_workspace: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An explicit manifest project_prefix override wins over WINTER_SERVICE_PREFIX."""
+    monkeypatch.setenv("WINTER_SERVICE_PREFIX", "envprefix")
+    fake = _fake_client_ps([])
+    manifest = _make_manifest(prefix="proj", services=["db"])
+    cmd_status(patterns=["alpha"], manifest=manifest, client=fake)
+    call = fake.compose_calls[0]
+    assert call.project == "proj-alpha"
 
 
 def test_cmd_status_multiple_ports(tmp_workspace: Path, capsys: pytest.CaptureFixture[str]) -> None:

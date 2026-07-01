@@ -42,7 +42,7 @@ from tests.fakes import FakeComposeClient
 
 
 def _make_manifest(
-    prefix: str = "myapp",
+    prefix: str | None = "myapp",
     compose_file: str = "compose.yaml",
     services: list[str] | None = None,
 ) -> DockerManifest:
@@ -238,6 +238,35 @@ def test_cmd_down_passes_compose_project_name_in_env(tmp_workspace: Path) -> Non
     assert call.env["COMPOSE_PROJECT_NAME"] == "proj-alpha"
 
 
+def test_cmd_down_uses_winter_service_prefix_when_no_manifest_override(
+    tmp_workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """down derives COMPOSE_PROJECT_NAME from WINTER_SERVICE_PREFIX when the manifest
+    has no project_prefix override (issue #5)."""
+    monkeypatch.setenv("WINTER_SERVICE_PREFIX", "envprefix")
+    fake = FakeComposeClient(compose_results=[_ok_result(0)])
+    manifest = _make_manifest(prefix=None, services=["db"])
+    rc = cmd_down("alpha", manifest, fake)
+    assert rc == 0
+    call = fake.compose_calls[0]
+    assert call.project == "envprefix-alpha"
+    assert call.env is not None
+    assert call.env["COMPOSE_PROJECT_NAME"] == "envprefix-alpha"
+
+
+def test_cmd_down_manifest_override_takes_precedence_over_winter_service_prefix(
+    tmp_workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An explicit manifest project_prefix override wins over WINTER_SERVICE_PREFIX."""
+    monkeypatch.setenv("WINTER_SERVICE_PREFIX", "envprefix")
+    fake = FakeComposeClient(compose_results=[_ok_result(0)])
+    manifest = _make_manifest(prefix="myapp", services=["db"])
+    rc = cmd_down("alpha", manifest, fake)
+    assert rc == 0
+    call = fake.compose_calls[0]
+    assert call.project == "myapp-alpha"
+
+
 def test_cmd_down_returns_compose_exit_code_on_failure(tmp_workspace: Path) -> None:
     """down propagates a non-zero compose exit code."""
     fake = FakeComposeClient(compose_results=[_ok_result(1)])
@@ -330,6 +359,37 @@ def test_cmd_up_passes_project_name_and_port_vars(tmp_workspace: Path, monkeypat
     assert up_call.env["COMPOSE_PROJECT_NAME"] == "myapp-alpha"
     assert up_call.env["WSD_PORT_DB"] == "4020"
     assert up_call.env["WSD_PORT_API"] == "4021"
+
+
+def test_cmd_up_uses_winter_service_prefix_when_no_manifest_override(
+    tmp_workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """up derives COMPOSE_PROJECT_NAME from WINTER_SERVICE_PREFIX when the manifest
+    has no project_prefix override (issue #5)."""
+    monkeypatch.setenv("WINTER_SERVICE_PREFIX", "envprefix")
+    clock = FakeClock(start=0.0, advance_per_call=0.0)
+    ps_containers = [_container_ps("db", "running", health_status=None)]
+    fake = FakeComposeClient(
+        compose_results=[
+            _ok_result(0),
+            _ps_result(ps_containers),
+        ]
+    )
+    manifest = _make_manifest(prefix=None, services=["db"])
+    rc = cmd_up(
+        "alpha",
+        manifest,
+        fake,
+        timeout=10.0,
+        poll_interval=0.0,
+        time_fn=clock.time,
+        sleep_fn=clock.sleep,
+    )
+    assert rc == 0
+    up_call = fake.compose_calls[0]
+    assert up_call.project == "envprefix-alpha"
+    assert up_call.env is not None
+    assert up_call.env["COMPOSE_PROJECT_NAME"] == "envprefix-alpha"
 
 
 def test_cmd_up_returns_nonzero_on_compose_up_failure(tmp_workspace: Path) -> None:

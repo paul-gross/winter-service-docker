@@ -20,12 +20,12 @@ For the doctor-probe contract (NDJSON shape, `pass`/`warn`/`fail` semantics, exi
 
 ## COMPOSE_PROJECT_NAME namespacing
 
-Every compose invocation sets `COMPOSE_PROJECT_NAME=<project_prefix>-<env>`, where:
+Every compose invocation sets `COMPOSE_PROJECT_NAME=<prefix>-<env>`, where:
 
-- `<project_prefix>` is the `project_prefix` key in `config.toml`.
+- `<prefix>` is resolved by `docker_orchestrator.env_context.resolve_project_prefix`: the optional `project_prefix` key in `config.toml`, when set, is an explicit per-provider override that takes precedence; otherwise `<prefix>` falls back to `WINTER_SERVICE_PREFIX`, injected into the process environment by winter-cli core (resolved from the workspace-level `service_prefix` config, defaulting to `"winter"`). `WINTER_SERVICE_PREFIX` is a base extension var, present on every dispatch action (`up`, `down`, `status`, `restart`, `logs`, `describe`, `catalog`), so `project_prefix` is purely optional — set it only if a workspace wants this provider specifically to use a different prefix than the rest of the workspace (e.g. to avoid a naming collision), not as a fallback for any action.
 - `<env>` is the environment name (`alpha`, `beta`, …) or the reserved literal `workspace`.
 
-This namespaces all containers, networks, and volumes per env so two feature environments never conflict on the same docker host. The workspace scope uses `<project_prefix>-workspace` as its compose project name.
+This namespaces all containers, networks, and volumes per env so two feature environments never conflict on the same docker host. The workspace scope uses `<prefix>-workspace` as its compose project name.
 
 ## WSD_PORT_* port-substitution scheme
 
@@ -39,10 +39,11 @@ where `<position>` is the 0-based index of the service's `[[service]]` entry amo
 
 ## Environment variable injection
 
-Which `WINTER_*` vars (and computed env-band entries) core injects on each action is owned by `workspace:/context/winter-cli/contracts/service-orchestrator.md#always-present-environment-variables` — the scope vars (`WINTER_ENV`, `WINTER_ENV_INDEX`, `WINTER_PORT_BASE`, `WINTER_WORKSPACE_PORT_BASE`, plus the band entries) land on `up`/`down`/`status`, while `restart` and `logs` receive only the four base extension vars. This provider's docker-specific behavior over that contract:
+Which `WINTER_*` vars (and computed env-band entries) core injects on each action is owned by `workspace:/context/winter-cli/contracts/service-orchestrator.md#always-present-environment-variables` — `WINTER_SERVICE_PREFIX` is one of the base extension vars, present on every action (`up`, `down`, `status`, `restart`, `logs`, `describe`, `catalog`); the scope vars (`WINTER_ENV`, `WINTER_ENV_INDEX`, `WINTER_PORT_BASE`, `WINTER_WORKSPACE_PORT_BASE`, plus the band entries) additionally land on `up`/`down`/`status` only. This provider's docker-specific behavior over that contract:
 
 - It reads the injected vars from the process environment via `os.environ` — it does not locate, open, parse, or shell-source any per-env file — and passes them through as the subprocess environment to `docker compose` alongside the computed `COMPOSE_PROJECT_NAME` and `WSD_PORT_*` values. Arbitrary workspace variables referenced in the compose file (e.g. `${DATABASE_URL}`, `${WTS_DB_PORT}`) interpolate the same way; declare them in `[env.feature.vars]` / `[env.workspace.vars]` in the workspace `config.toml`.
 - Because `restart`/`logs` run without `WINTER_PORT_BASE`, `docker compose` may emit benign `"variable is not set"` warnings for `${WSD_PORT_*}`/`${WINTER_PORT_BASE}` references in the compose file; these are expected and safe to ignore — `restart`/`logs` act on already-created containers and do not re-publish ports.
+- `restart`/`logs` still receive `WINTER_SERVICE_PREFIX` (it's a base extension var, not a scope var), so `COMPOSE_PROJECT_NAME` resolves the same way for those actions as it does for `up`/`down`/`status` — no `project_prefix` override is needed.
 
 ## `docker logs` flag pass-through
 
@@ -63,4 +64,4 @@ Winter re-applies its own tail/time backstop, so faithfully streaming docker's o
 
 ## Workspace-scope model and named volumes
 
-The workspace scope drives a separate `<project_prefix>-workspace` compose project. Services are partitioned by the per-service `scope` field in `config.toml`: `scope = "project"` (default, per-env) or `scope = "workspace"` (singleton shared across all envs). The loader splits `[[service]]` entries into the project partition and the workspace partition at parse time; every verb (`up`, `down`, `restart`, `logs`, `status`) calls `services_for_scope(env)` to select the appropriate partition. Workspace-scoped services have `port_base = None` and receive no `WSD_PORT_*` substitution variables; however, core injects `WINTER_WORKSPACE_PORT_BASE` into the process environment for the workspace scope, so `workspace-compose.yaml` can reference `${WINTER_WORKSPACE_PORT_BASE}` (e.g. `"${WINTER_WORKSPACE_PORT_BASE}:5432"` → `4000:5432`) directly. Names are globally unique across both scopes (enforced at load time). Named volumes declared in `workspace-compose.yaml` persist across `compose down`; `down workspace` is an authoritative `docker compose down` for those containers but does not remove volumes. Remove volumes explicitly with `docker volume rm ...` if a clean slate is needed.
+The workspace scope drives a separate `<prefix>-workspace` compose project. Services are partitioned by the per-service `scope` field in `config.toml`: `scope = "project"` (default, per-env) or `scope = "workspace"` (singleton shared across all envs). The loader splits `[[service]]` entries into the project partition and the workspace partition at parse time; every verb (`up`, `down`, `restart`, `logs`, `status`) calls `services_for_scope(env)` to select the appropriate partition. Workspace-scoped services have `port_base = None` and receive no `WSD_PORT_*` substitution variables; however, core injects `WINTER_WORKSPACE_PORT_BASE` into the process environment for the workspace scope, so `workspace-compose.yaml` can reference `${WINTER_WORKSPACE_PORT_BASE}` (e.g. `"${WINTER_WORKSPACE_PORT_BASE}:5432"` → `4000:5432`) directly. Names are globally unique across both scopes (enforced at load time). Named volumes declared in `workspace-compose.yaml` persist across `compose down`; `down workspace` is an authoritative `docker compose down` for those containers but does not remove volumes. Remove volumes explicitly with `docker volume rm ...` if a clean slate is needed.

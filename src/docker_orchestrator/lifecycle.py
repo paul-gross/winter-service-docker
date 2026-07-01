@@ -49,7 +49,7 @@ from collections.abc import Callable
 
 from docker_orchestrator.compose_client import IComposeClient
 from docker_orchestrator.compose_ps import extract_health, parse_compose_ps_output
-from docker_orchestrator.env_context import EnvContext, build_env_context
+from docker_orchestrator.env_context import EnvContext, build_env_context, resolve_project_prefix
 from docker_orchestrator.manifest import DockerManifest, ServiceDecl
 
 # ---------------------------------------------------------------------------
@@ -172,14 +172,17 @@ def cmd_down(
     Emits a concise diagnostic line to stderr.
     """
     compose_file = manifest.compose_file_for_scope(env)
-    if not manifest.project_prefix or not compose_file:
+    prefix = resolve_project_prefix(manifest.project_prefix)
+    if not prefix or not compose_file:
         print(
-            "docker-orchestrator: down: manifest is missing project_prefix or compose file for this scope",
+            "docker-orchestrator: down: no project-name prefix available "
+            "(set WINTER_SERVICE_PREFIX or config.toml's project_prefix override) "
+            "or missing compose file for this scope",
             file=sys.stderr,
         )
         return 1
 
-    ctx: EnvContext = build_env_context(env, manifest.project_prefix)
+    ctx: EnvContext = build_env_context(env, prefix)
     scoped_services: tuple[ServiceDecl, ...] = manifest.services_for_scope(env)
     compose_env = _build_compose_env(ctx, scoped_services)
 
@@ -251,14 +254,17 @@ def cmd_up(
     _sleep_fn = sleep_fn if sleep_fn is not None else _time.sleep
 
     compose_file = manifest.compose_file_for_scope(env)
-    if not manifest.project_prefix or not compose_file:
+    prefix = resolve_project_prefix(manifest.project_prefix)
+    if not prefix or not compose_file:
         print(
-            "docker-orchestrator: up: manifest is missing project_prefix or compose file for this scope",
+            "docker-orchestrator: up: no project-name prefix available "
+            "(set WINTER_SERVICE_PREFIX or config.toml's project_prefix override) "
+            "or missing compose file for this scope",
             file=sys.stderr,
         )
         return 1
 
-    ctx: EnvContext = build_env_context(env, manifest.project_prefix)
+    ctx: EnvContext = build_env_context(env, prefix)
     scoped_services: tuple[ServiceDecl, ...] = manifest.services_for_scope(env)
     compose_env = _build_compose_env(ctx, scoped_services)
 
