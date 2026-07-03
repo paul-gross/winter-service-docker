@@ -804,6 +804,271 @@ def test_cli_up_with_env_dispatches(tmp_path: Path, tmp_workspace: Path, capsys:
     assert rc == 0
 
 
+# ---------------------------------------------------------------------------
+# 12. Service-segment patterns for partial up/down (issue #6)
+#
+# Covers:
+#   - Partial up: ``up alpha/api`` issues ``compose up -d api`` only.
+#   - Partial down: ``down alpha/web`` issues ``compose stop web`` then
+#     ``compose rm -f web``, leaving unmatched services alone.
+#   - Bare-scope and ``<scope>/*`` up/down are unchanged (whole-project).
+#   - Glob service segment (``alpha/wor*``) matches only the glob-matching subset.
+#   - The empty-scope no-op is preserved for both bare-scope and partial patterns.
+#   - The readiness gate restricts ``compose ps`` to the matched subset.
+# ---------------------------------------------------------------------------
+
+
+def test_cmd_up_partial_issues_compose_up_d_matched_only(tmp_workspace: Path) -> None:
+    """``up alpha/api`` starts only the ``api`` service."""
+    clock = FakeClock()
+    ps_containers = [_container_ps("api", "running", health_status=None)]
+    fake = FakeComposeClient(
+        compose_results=[
+            _ok_result(0),  # compose up -d api
+            _ps_result(ps_containers),  # compose ps --all api
+        ]
+    )
+    manifest = _make_manifest(prefix="myapp", services=["db", "api"])
+    rc = cmd_up(
+        "alpha/api",
+        manifest,
+        fake,
+        timeout=10.0,
+        poll_interval=0.0,
+        time_fn=clock.time,
+        sleep_fn=clock.sleep,
+    )
+    assert rc == 0
+    up_call = fake.compose_calls[0]
+    assert up_call.project == "myapp-alpha"
+    assert up_call.args == ["up", "-d", "api"]
+    ps_call = fake.compose_calls[1]
+    assert ps_call.args == ["ps", "--all", "--format", "json", "api"]
+
+
+def test_cmd_up_partial_glob_matches_subset(tmp_workspace: Path) -> None:
+    """``up alpha/wor*`` matches only services whose name starts with 'wor'."""
+    clock = FakeClock()
+    ps_containers = [_container_ps("worker", "running", health_status=None)]
+    fake = FakeComposeClient(
+        compose_results=[
+            _ok_result(0),
+            _ps_result(ps_containers),
+        ]
+    )
+    manifest = _make_manifest(services=["db", "worker"])
+    rc = cmd_up(
+        "alpha/wor*",
+        manifest,
+        fake,
+        timeout=10.0,
+        poll_interval=0.0,
+        time_fn=clock.time,
+        sleep_fn=clock.sleep,
+    )
+    assert rc == 0
+    up_call = fake.compose_calls[0]
+    assert up_call.args == ["up", "-d", "worker"]
+
+
+def test_cmd_up_partial_no_match_is_noop(tmp_workspace: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """``up alpha/nonexistent`` matches nothing → 0, no compose call."""
+    clock = FakeClock()
+    fake = FakeComposeClient()
+    manifest = _make_manifest(services=["db", "api"])
+    rc = cmd_up(
+        "alpha/nonexistent",
+        manifest,
+        fake,
+        timeout=10.0,
+        poll_interval=0.0,
+        time_fn=clock.time,
+        sleep_fn=clock.sleep,
+    )
+    assert rc == 0
+    assert fake.compose_calls == []
+    assert "no services matched" in capsys.readouterr().err
+
+
+def test_cmd_up_bare_scope_wildcard_is_whole_scope(tmp_workspace: Path) -> None:
+    """``up alpha/*`` preserves whole-scope (no explicit svc args)."""
+    clock = FakeClock()
+    ps_containers = [_container_ps("db", "running", health_status=None)]
+    fake = FakeComposeClient(
+        compose_results=[
+            _ok_result(0),
+            _ps_result(ps_containers),
+        ]
+    )
+    manifest = _make_manifest(services=["db"])
+    rc = cmd_up(
+        "alpha/*",
+        manifest,
+        fake,
+        timeout=10.0,
+        poll_interval=0.0,
+        time_fn=clock.time,
+        sleep_fn=clock.sleep,
+    )
+    assert rc == 0
+    up_call = fake.compose_calls[0]
+    assert up_call.args == ["up", "-d"]
+    ps_call = fake.compose_calls[1]
+    assert ps_call.args == ["ps", "--all", "--format", "json"]
+
+
+def test_cmd_up_bare_scope_empty_scope_noop_preserved(tmp_workspace: Path) -> None:
+    """Bare-scope up on an empty scope is still a no-op (regression guard)."""
+    clock = FakeClock()
+    fake = FakeComposeClient()
+    manifest = _make_manifest(services=[])
+    rc = cmd_up(
+        "alpha",
+        manifest,
+        fake,
+        timeout=10.0,
+        poll_interval=0.0,
+        time_fn=clock.time,
+        sleep_fn=clock.sleep,
+    )
+    assert rc == 0
+    assert fake.compose_calls == []
+
+
+def test_cmd_up_partial_pattern_empty_scope_noop(tmp_workspace: Path) -> None:
+    """A service-segment pattern against an empty scope is still a no-op."""
+    clock = FakeClock()
+    fake = FakeComposeClient()
+    manifest = _make_manifest(services=[])
+    rc = cmd_up(
+        "alpha/api",
+        manifest,
+        fake,
+        timeout=10.0,
+        poll_interval=0.0,
+        time_fn=clock.time,
+        sleep_fn=clock.sleep,
+    )
+    assert rc == 0
+    assert fake.compose_calls == []
+
+
+def test_cmd_down_partial_stops_and_removes_matched_only(tmp_workspace: Path) -> None:
+    """``down alpha/web`` stops+removes only 'web', leaving 'db' alone."""
+    fake = FakeComposeClient(compose_results=[_ok_result(0), _ok_result(0)])
+    manifest = _make_manifest(prefix="myapp", services=["db", "web"])
+    rc = cmd_down("alpha/web", manifest, fake)
+    assert rc == 0
+    assert len(fake.compose_calls) == 2
+    stop_call = fake.compose_calls[0]
+    assert stop_call.project == "myapp-alpha"
+    assert stop_call.args == ["stop", "web"]
+    rm_call = fake.compose_calls[1]
+    assert rm_call.args == ["rm", "-f", "web"]
+
+
+def test_cmd_down_partial_glob_matches_subset(tmp_workspace: Path) -> None:
+    """``down alpha/wor*`` matches only 'worker'."""
+    fake = FakeComposeClient(compose_results=[_ok_result(0), _ok_result(0)])
+    manifest = _make_manifest(services=["db", "worker"])
+    rc = cmd_down("alpha/wor*", manifest, fake)
+    assert rc == 0
+    assert fake.compose_calls[0].args == ["stop", "worker"]
+    assert fake.compose_calls[1].args == ["rm", "-f", "worker"]
+
+
+def test_cmd_down_partial_stop_failure_skips_rm(tmp_workspace: Path) -> None:
+    """A failing ``compose stop`` short-circuits before ``rm`` and propagates the exit code."""
+    fake = FakeComposeClient(compose_results=[_ok_result(1)])
+    manifest = _make_manifest(services=["db", "web"])
+    rc = cmd_down("alpha/web", manifest, fake)
+    assert rc == 1
+    assert len(fake.compose_calls) == 1
+    assert fake.compose_calls[0].args == ["stop", "web"]
+
+
+def test_cmd_down_partial_no_match_is_noop(tmp_workspace: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """``down alpha/nonexistent`` matches nothing → 0, no compose call."""
+    fake = FakeComposeClient()
+    manifest = _make_manifest(services=["db", "api"])
+    rc = cmd_down("alpha/nonexistent", manifest, fake)
+    assert rc == 0
+    assert fake.compose_calls == []
+    assert "no services matched" in capsys.readouterr().err
+
+
+def test_cmd_down_bare_scope_wildcard_is_whole_project(tmp_workspace: Path) -> None:
+    """``down alpha/*`` preserves whole-project teardown (unchanged ``down`` call)."""
+    fake = FakeComposeClient(compose_results=[_ok_result(0)])
+    manifest = _make_manifest(prefix="myapp", services=["db", "web"])
+    rc = cmd_down("alpha/*", manifest, fake)
+    assert rc == 0
+    assert len(fake.compose_calls) == 1
+    assert fake.compose_calls[0].args == ["down"]
+
+
+def test_cmd_down_bare_scope_empty_scope_noop_preserved(tmp_workspace: Path) -> None:
+    """Bare-scope down on a scope with no declared services and no compose file
+    is still a no-op (regression guard for the pre-existing empty-scope guard)."""
+    fake = FakeComposeClient()
+    manifest = DockerManifest(
+        project_prefix="myapp",
+        environment_compose_file=None,
+        workspace_compose_file=None,
+        services=(),
+    )
+    rc = cmd_down("alpha", manifest, fake)
+    assert rc == 0
+    assert fake.compose_calls == []
+
+
+def test_cli_up_partial_pattern_dispatches(
+    tmp_path: Path, tmp_workspace: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """CLI ``up alpha/db`` dispatches through lifecycle with the matched subset only."""
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.toml").write_text(
+        'project_prefix = "myapp"\nenvironment_compose_file = "compose.yaml"\n'
+        'workspace_compose_file = "workspace-compose.yaml"\n'
+        '[[service]]\nname = "db"\n[[service]]\nname = "api"\n',
+        encoding="utf-8",
+    )
+
+    ps_containers = [_container_ps("db", "running")]
+    results = [_ok_result(0), _ps_result(ps_containers)]
+
+    import docker_orchestrator.compose_client as cc_mod
+
+    class PatchedClient:
+        def __init__(self):
+            self._results = list(results)
+            self.calls: list = []
+
+        def compose(self, project, compose_file, args, **kwargs):
+            self.calls.append(args)
+            if self._results:
+                return self._results.pop(0)
+            return _ok_result(0)
+
+    patched = PatchedClient()
+
+    with (
+        patch.dict(
+            "os.environ",
+            {
+                "WINTER_EXT_CONFIG_DIR": str(config_dir),
+                "WINTER_WORKSPACE_DIR": str(tmp_workspace),
+            },
+        ),
+        patch.object(cc_mod, "ComposeClient", lambda: patched),
+    ):
+        rc = cli_main(["up", "alpha/db"])
+
+    assert rc == 0
+    assert patched.calls[0] == ["up", "-d", "db"]
+
+
 def test_cli_down_with_env_dispatches(tmp_path: Path, tmp_workspace: Path, capsys: pytest.CaptureFixture[str]) -> None:
     """CLI ``down alpha`` dispatches through lifecycle and returns 0 on success."""
     config_dir = tmp_path / "config"

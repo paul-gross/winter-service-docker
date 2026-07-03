@@ -103,7 +103,12 @@ def _cmd_status(argv_rest: list[str], workspace_root: Path | None) -> int:
 
 
 def _cmd_up(argv_rest: list[str], workspace_root: Path | None) -> int:
-    """Implement ``up <env>``."""
+    """Implement ``up <env>[/<svc-pattern>]``.
+
+    A bare ``<env>`` or ``<env>/*`` starts every declared service in the
+    scope; a concrete or glob service segment (``<env>/api``) starts only the
+    matched subset (see ``lifecycle.cmd_up``).
+    """
     from docker_orchestrator.compose_client import ComposeClient
     from docker_orchestrator.lifecycle import cmd_up
     from docker_orchestrator.manifest import resolve_config_dir
@@ -129,7 +134,12 @@ def _cmd_up(argv_rest: list[str], workspace_root: Path | None) -> int:
 
 
 def _cmd_down(argv_rest: list[str], workspace_root: Path | None) -> int:
-    """Implement ``down <env>``."""
+    """Implement ``down <env>[/<svc-pattern>]``.
+
+    A bare ``<env>`` or ``<env>/*`` tears down the whole scope; a concrete or
+    glob service segment (``<env>/api``) stops only the matched subset,
+    leaving unmatched containers running (see ``lifecycle.cmd_down``).
+    """
     from docker_orchestrator.compose_client import ComposeClient
     from docker_orchestrator.lifecycle import cmd_down
     from docker_orchestrator.manifest import resolve_config_dir
