@@ -171,7 +171,22 @@ def cmd_down(
     Returns the compose exit code.
     Emits a concise diagnostic line to stderr.
     """
+    scoped_services: tuple[ServiceDecl, ...] = manifest.services_for_scope(env)
     compose_file = manifest.compose_file_for_scope(env)
+    # Guard: a scope with no declared services and no compose file was never
+    # configured at all (e.g. a workspace-only manifest asked to tear down a
+    # feature env) — nothing to do.  When a compose file IS configured, "down"
+    # still runs even if scoped_services is empty, since the file may reference
+    # containers that a prior "up" started; compose down is a harmless no-op
+    # against an unknown/empty project.
+    if not scoped_services and not compose_file:
+        scope_label = "workspace" if env == "workspace" else env
+        print(
+            f"docker-orchestrator: down: no {scope_label} services declared; nothing to tear down",
+            file=sys.stderr,
+        )
+        return 0
+
     prefix = resolve_project_prefix(manifest.project_prefix)
     if not prefix or not compose_file:
         print(
@@ -183,7 +198,6 @@ def cmd_down(
         return 1
 
     ctx: EnvContext = build_env_context(env, prefix)
-    scoped_services: tuple[ServiceDecl, ...] = manifest.services_for_scope(env)
     compose_env = _build_compose_env(ctx, scoped_services)
 
     print(
@@ -253,6 +267,19 @@ def cmd_up(
     _time_fn = time_fn if time_fn is not None else _time.monotonic
     _sleep_fn = sleep_fn if sleep_fn is not None else _time.sleep
 
+    # Guard: if no services belong to this scope, skip the compose call entirely.
+    # Each scope-pure compose file contains only its scope's services, so
+    # an arg-less "up -d" starts exactly the right set.  But when the manifest
+    # declares no services for this scope there is nothing to start.
+    scoped_services: tuple[ServiceDecl, ...] = manifest.services_for_scope(env)
+    if not scoped_services:
+        scope_label = "workspace" if env == "workspace" else env
+        print(
+            f"docker-orchestrator: up: no {scope_label} services declared; nothing to start",
+            file=sys.stderr,
+        )
+        return 0
+
     compose_file = manifest.compose_file_for_scope(env)
     prefix = resolve_project_prefix(manifest.project_prefix)
     if not prefix or not compose_file:
@@ -265,20 +292,7 @@ def cmd_up(
         return 1
 
     ctx: EnvContext = build_env_context(env, prefix)
-    scoped_services: tuple[ServiceDecl, ...] = manifest.services_for_scope(env)
     compose_env = _build_compose_env(ctx, scoped_services)
-
-    # Guard: if no services belong to this scope, skip the compose call entirely.
-    # Each scope-pure compose file contains only its scope's services, so
-    # an arg-less "up -d" starts exactly the right set.  But when the manifest
-    # declares no services for this scope there is nothing to start.
-    if not scoped_services:
-        scope_label = "workspace" if ctx.env == "workspace" else ctx.env
-        print(
-            f"docker-orchestrator: up: no {scope_label} services declared; nothing to start",
-            file=sys.stderr,
-        )
-        return 0
 
     print(
         f"docker-orchestrator: up: starting {ctx.compose_project_name}",

@@ -406,6 +406,110 @@ class TestUpDownScopeFiltering:
             f"got calls: {[c.args for c in up_calls]}"
         )
 
+    def test_up_workspace_only_manifest_feature_env_no_compose_call(self, tmp_path: Path) -> None:
+        """BUG FIX: up on a feature env of a workspace-only manifest cleanly no-ops.
+
+        When ``environment_compose_file`` is unset (None) and every declared
+        service is workspace-scoped, there is nothing configured for the
+        "alpha" feature-env scope.  cmd_up must return 0 without ever
+        reaching the prefix/compose-file presence check, and must not call
+        compose at all.
+        """
+        manifest = DockerManifest(
+            project_prefix="myapp",
+            environment_compose_file=None,
+            workspace_compose_file="compose.yaml",
+            services=(),  # no project services
+            workspace_services=(ServiceDecl(name="db"),),
+        )
+        client = FakeComposeClient()
+        rc = cmd_up("alpha", manifest, client)
+        assert rc == 0, f"expected 0, got {rc}"
+        assert client.compose_calls == [], (
+            f"compose must not be called for a scope with no declared services "
+            f"and no compose file; got calls: {[c.args for c in client.compose_calls]}"
+        )
+
+    def test_down_workspace_only_manifest_feature_env_no_compose_call(self, tmp_path: Path) -> None:
+        """BUG FIX: down on a feature env of a workspace-only manifest cleanly no-ops.
+
+        Same manifest shape as the up case above: no project services and no
+        ``environment_compose_file``.  cmd_down must return 0 without ever
+        reaching the prefix/compose-file presence check, and must not call
+        compose at all.
+        """
+        manifest = DockerManifest(
+            project_prefix="myapp",
+            environment_compose_file=None,
+            workspace_compose_file="compose.yaml",
+            services=(),  # no project services
+            workspace_services=(ServiceDecl(name="db"),),
+        )
+        client = FakeComposeClient()
+        rc = cmd_down("alpha", manifest, client)
+        assert rc == 0, f"expected 0, got {rc}"
+        assert client.compose_calls == [], (
+            f"compose must not be called for a scope with no declared services "
+            f"and no compose file; got calls: {[c.args for c in client.compose_calls]}"
+        )
+
+    def test_down_empty_scope_with_compose_file_still_tears_down(self, tmp_path: Path) -> None:
+        """ASYMMETRY: down still runs 'compose down' when a file is configured.
+
+        The cmd_down guard is deliberately narrower than cmd_up's: it no-ops
+        only when BOTH scoped_services is empty AND compose_file is unset.  When
+        an ``environment_compose_file`` IS configured but the scope declares no
+        services, ``down`` must still run a whole-project ``compose down`` — the
+        file may reference containers a prior ``up`` (against an earlier
+        manifest) started, and skipping teardown would leak them.  This test
+        locks that discriminating case so a future "make down mirror up"
+        simplification can't silently reintroduce the leak.
+        """
+        manifest = DockerManifest(
+            project_prefix="myapp",
+            environment_compose_file="compose.yaml",  # configured...
+            workspace_compose_file="compose.yaml",
+            services=(),  # ...but no project services declared
+            workspace_services=(ServiceDecl(name="db"),),
+        )
+        client = FakeComposeClient(compose_results=[_ok_result(0)])
+        rc = cmd_down("alpha", manifest, client)
+        assert rc == 0, f"expected 0, got {rc}"
+        down_calls = [c for c in client.compose_calls if "down" in c.args]
+        assert len(down_calls) == 1, (
+            f"down must run 'compose down' when a compose file is configured even "
+            f"with no declared services; got calls: {[c.args for c in client.compose_calls]}"
+        )
+        assert down_calls[0].project == "myapp-alpha", (
+            f"teardown must target the per-env project; got {down_calls[0].project}"
+        )
+
+    def test_empty_scope_noop_diagnostics_are_action_specific(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """The up/down empty-scope no-ops emit distinct, action-appropriate text.
+
+        Pins the stderr wording so a copy-paste regression (e.g. 'down: ...
+        nothing to start') is caught by the suite: an agent reading stderr must
+        see a verb that matches the action it invoked.
+        """
+        manifest = DockerManifest(
+            project_prefix="myapp",
+            environment_compose_file=None,
+            workspace_compose_file="compose.yaml",
+            services=(),
+            workspace_services=(ServiceDecl(name="db"),),
+        )
+
+        cmd_up("alpha", manifest, FakeComposeClient())
+        up_err = capsys.readouterr().err
+        assert "up: no alpha services declared; nothing to start" in up_err, up_err
+
+        cmd_down("alpha", manifest, FakeComposeClient())
+        down_err = capsys.readouterr().err
+        assert "down: no alpha services declared; nothing to tear down" in down_err, down_err
+        assert "nothing to start" not in down_err, f"down must not describe teardown as 'start'; got: {down_err!r}"
+
     def test_down_alpha_targets_per_env_project(self, tmp_path: Path) -> None:
         """cmd_down for alpha uses myapp-alpha, not myapp-workspace."""
         manifest = _mixed_manifest()

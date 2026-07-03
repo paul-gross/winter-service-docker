@@ -276,10 +276,17 @@ def test_cmd_down_returns_compose_exit_code_on_failure(tmp_workspace: Path) -> N
 
 
 def test_cmd_down_returns_nonzero_on_missing_manifest(tmp_workspace: Path) -> None:
-    """down returns non-zero when project_prefix or compose file is None."""
+    """down returns non-zero when project_prefix or compose file is None.
+
+    Declares a service for the scope so the empty-scope no-op guard does not
+    mask the missing prefix/compose-file error this test targets.
+    """
     fake = FakeComposeClient()
     manifest = DockerManifest(
-        project_prefix=None, environment_compose_file=None, workspace_compose_file=None, services=()
+        project_prefix=None,
+        environment_compose_file=None,
+        workspace_compose_file=None,
+        services=(ServiceDecl(name="db"),),
     )
     rc = cmd_down("alpha", manifest, fake)
     assert rc != 0
@@ -413,10 +420,18 @@ def test_cmd_up_returns_nonzero_on_compose_up_failure(tmp_workspace: Path) -> No
 
 
 def test_cmd_up_returns_nonzero_on_missing_manifest(tmp_workspace: Path) -> None:
+    """up returns non-zero when project_prefix or compose file is None.
+
+    Declares a service for the scope so the empty-scope no-op guard does not
+    mask the missing prefix/compose-file error this test targets.
+    """
     clock = FakeClock()
     fake = FakeComposeClient()
     manifest = DockerManifest(
-        project_prefix=None, environment_compose_file=None, workspace_compose_file=None, services=()
+        project_prefix=None,
+        environment_compose_file=None,
+        workspace_compose_file=None,
+        services=(ServiceDecl(name="db"),),
     )
     rc = cmd_up(
         "alpha",

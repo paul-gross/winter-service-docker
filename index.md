@@ -8,7 +8,7 @@ Files in this extension are addressed with the `winter-service-docker:` prefix â
 
 ## Feature environment setup steps
 
-This extension needs a project-specific `config.toml` and two compose files (`environment-compose.yaml` for per-env services, `workspace-compose.yaml` for workspace singletons) wired to your project's services. After `winter ws init` clones the extension, walk the user through [context/workflow-setup.md](./context/workflow-setup.md) to scaffold and populate `workspace:/.winter/config/winter-service-docker/`. Without these, `winter service up <env>` has no services to start.
+This extension needs a project-specific `config.toml` plus at least one compose file wired to your project's services â€” `environment-compose.yaml` for per-env services and/or `workspace-compose.yaml` for workspace singletons. A stack with only workspace singletons declares just `workspace-compose.yaml` (and no `environment_compose_file`); an empty scope is then a clean no-op, so `winter service up <env>` starts the workspace services and skips the per-env scope. After `winter ws init` clones the extension, walk the user through [context/workflow-setup.md](./context/workflow-setup.md) to scaffold and populate `workspace:/.winter/config/winter-service-docker/`.
 
 ## What this extension provides
 
