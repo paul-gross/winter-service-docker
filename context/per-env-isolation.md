@@ -9,7 +9,7 @@ A workspace config declares **up to two compose files** in `config.toml`, at lea
 
 Either may be omitted when its scope has no services: a workspace-only stack sets just `workspace_compose_file`, and a scope with no declared services is a clean exit-0 no-op rather than an error.
 
-Each file is independently runnable by hand. Winter-cli core injects `WINTER_PORT_BASE` and the scope's env-var band entries (`[env.workspace.vars]` / `[env.feature.vars]`) into the provider subprocess environment before `up`, `down`, and `status` invocations — see `winter-service-docker:/context/provider-contract.md#environment-variable-injection` for the full contract. To reproduce manually, source `winter env <scope>` first:
+Each file is independently runnable by hand. Winter-cli core injects `WINTER_PORT_BASE` and the scope's env-var band entries into the provider subprocess environment before `up`, `down`, and `status` invocations — see `winter-service-docker:/context/provider-contract.md#environment-variable-injection` for the full contract. To reproduce manually, source `winter env <scope>` first:
 
 ```bash
 # Feature env (e.g. alpha):
