@@ -1,0 +1,19 @@
+[global]
+# MD076 off: rule lists carry multi-block items (paragraphs, fences, nested lists), so the blank lines between them are what CommonMark requires, not stray spacing
+# MD018 off: the 120-column wrap can land an issue reference (`#N`) at line start; CommonMark does not parse it as a heading, but MD018's autofix would turn it into one
+# MD033 off: these docs write placeholders as `<env>` / `<repo>` in prose; CommonMark reads them as inline HTML, but they are notation for the reader, not markup
+disable = ["MD076", "MD018", "MD033"]
+
+[MD004]
+style = "dash"
+
+[MD046]
+# Fenced everywhere, so every block can declare its language (MD040) — an
+# indented block cannot, and "consistent" would let a file drift either way.
+style = "fenced"
+
+[MD013]
+# 120 matches dprint's lineWidth; tables and code fences keep their own formatting, so only prose is held to the ceiling
+line-length = 120
+tables = false
+code-blocks = false

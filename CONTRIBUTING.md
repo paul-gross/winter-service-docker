@@ -4,19 +4,36 @@
 
 Conventional Commits with a scope:
 
-    <type>(<scope>): <description>
+```text
+<type>(<scope>): <description>
+```
 
-    [optional body]
+```text
+[optional body]
+```
 
 - Types: `feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `perf`, `style`, `ai`
 - Scope: repo name or subsystem (e.g. `winter-service-docker`, `workflow`, `scaffold`)
-- The `/wf-commit` skill from [winter-workflow](https://github.com/paul-gross/winter-workflow) generates commits in this format
+- The `/wf-commit` skill from [winter-workflow](https://github.com/paul-gross/winter-workflow) generates commits in this
+  format
 
 ## Pre-commit checks
 
+Markdown: every `.md` file here is held to the mechanical style gates `dprint.json` and `.rumdl.toml` declare — run both
+before pushing any documentation change, and note that one of them writes its own fix:
+
+```bash
+dprint check          # dprint fmt to apply
+rumdl check .         # rumdl check . --fix for the autofixable subset
+```
+
+They also run through `winter lint`: the `winter-harness` extension contributes the check, and committing these two
+configs is what opts this repo into it.
+
 Bash scripts: `bash -n <file>` catches syntax errors; `winter doctor` exercises the probe. No automated pre-commit hook.
 
-Python (`src/docker_orchestrator/`, `tests/`): run these before pushing any Python changes. Requires Python 3.11+ (`tomllib` is stdlib from 3.11; the current dev env uses 3.12).
+Python (`src/docker_orchestrator/`, `tests/`): run these before pushing any Python changes. Requires Python 3.11+
+(`tomllib` is stdlib from 3.11; the current dev env uses 3.12).
 
 ```bash
 uv run pytest          # must be green
@@ -32,11 +49,14 @@ mise run lint
 mise run typecheck
 ```
 
-The `docker_orchestrator` runtime has no third-party dependencies (stdlib-only). The dev tooling (pytest, ruff, pyright) lives in `pyproject.toml`'s `[dependency-groups] dev` and is installed via `uv sync`.
+The `docker_orchestrator` runtime has no third-party dependencies (stdlib-only). The dev tooling (pytest, ruff, pyright)
+lives in `pyproject.toml`'s `[dependency-groups] dev` and is installed via `uv sync`.
 
 ## No-real-docker test approach
 
-Unit tests never require a running docker daemon. All docker and `docker compose` calls go through the injectable `ComposeClient` seam (`src/docker_orchestrator/compose_client.py`). Tests use `FakeComposeClient` or `FakeRunner` from `tests/fakes.py` to record invocations and return canned results.
+Unit tests never require a running docker daemon. All docker and `docker compose` calls go through the injectable
+`ComposeClient` seam (`src/docker_orchestrator/compose_client.py`). Tests use `FakeComposeClient` or `FakeRunner` from
+`tests/fakes.py` to record invocations and return canned results.
 
 To test the doctor probe (which calls real docker binaries) or hooks, run them directly with appropriate env vars:
 
@@ -44,11 +64,13 @@ To test the doctor probe (which calls real docker binaries) or hooks, run them d
 WINTER_WORKSPACE_DIR=$(pwd) bash workflow/doctor.sh
 ```
 
-Expected output in this environment: both probes will report `fail` (docker daemon unavailable and/or compose v2 missing) — this is correct and expected behavior for the probe.
+Expected output in this environment: both probes will report `fail` (docker daemon unavailable and/or compose v2
+missing) — this is correct and expected behavior for the probe.
 
 ## Testing changed orchestrator code against a worktree
 
-The installed extension (`winter-service-docker:/`) runs committed code. The PRIMARY door for exercising in-progress changes is the `--service-orchestrator` root flag, which sets `WINTER_EXT_DIR`/`WINTER_EXT_PREFIX` for you:
+The installed extension (`winter-service-docker:/`) runs committed code. The PRIMARY door for exercising in-progress
+changes is the `--service-orchestrator` root flag, which sets `WINTER_EXT_DIR`/`WINTER_EXT_PREFIX` for you:
 
 ```bash
 winter --service-orchestrator=/path/to/gamma/winter-service-docker service describe
@@ -72,7 +94,8 @@ WINTER_WORKSPACE_DIR=$WINTER_WORKSPACE_DIR bash "$WINTER_EXT_DIR/workflow/doctor
 
 ## Scaffolder
 
-The scaffolder (`src/docker_orchestrator/scaffold.py`) has no external dependencies and is covered by `tests/test_scaffold.py`. Run it directly for manual testing:
+The scaffolder (`src/docker_orchestrator/scaffold.py`) has no external dependencies and is covered by
+`tests/test_scaffold.py`. Run it directly for manual testing:
 
 ```bash
 PYTHONPATH=src python3 -m docker_orchestrator.scaffold /tmp/wsd-test
