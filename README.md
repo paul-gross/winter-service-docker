@@ -49,7 +49,7 @@ stack side-by-side on the same docker host without port or namespace conflicts.
 3. **Edit `environment-compose.yaml`** — per-env services; use `${WSD_PORT_<NAME>}` for published ports.
 
 4. **Edit `workspace-compose.yaml`** — workspace singleton services; use fixed ports or reference
-   `${WINTER_WORKSPACE_PORT_BASE}` (injected by winter-cli core; available via `source <(winter env workspace)` for
+   `${WINTER_WORKSPACE_PORT_BASE}` (injected by winter-cli core; available via `source <(winter env workspace --resolve)` for
    manual runs).
 
 5. **Register the extension** in workspace `.winter/config.toml`:
@@ -85,17 +85,18 @@ See [`index.md`](./index.md) for workspace-runtime rules, the port-substitution 
 
 Each scope-pure compose file is independently runnable by hand. The orchestrator runs compose with the scope's
 environment injected by winter-cli core (not `--env-file`), so `${VAR}` references in the compose file resolve against
-the injected vars. To reproduce the same environment by hand, source it from `winter env <scope>`:
+the injected vars. To reproduce the same environment by hand, source it from `winter env <scope> --resolve` (without
+`--resolve`, a command-valued band entry prints winter's placeholder instead of running):
 
 ```bash
 # Per-env services (e.g. alpha env, WINTER_SERVICE_PREFIX=myapp):
-source <(winter env alpha)
+source <(winter env alpha --resolve)
 docker compose -p myapp-alpha \
     -f .winter/config/winter-service-docker/environment-compose.yaml \
     up -d
 
 # Workspace singleton services:
-source <(winter env workspace)
+source <(winter env workspace --resolve)
 docker compose -p myapp-workspace \
     -f .winter/config/winter-service-docker/workspace-compose.yaml \
     up -d

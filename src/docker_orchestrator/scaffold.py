@@ -40,7 +40,7 @@ _ENVIRONMENT_COMPOSE_YAML = """\
 # config.toml (workspace-scoped entries are excluded).  Two envs never collide.
 #
 # You can reproduce what winter does by hand:
-#   source <(winter env alpha)
+#   source <(winter env alpha --resolve)
 #   docker compose -p myapp-alpha \\
 #       -f environment-compose.yaml \\
 #       up -d
@@ -71,7 +71,7 @@ _WORKSPACE_COMPOSE_YAML = """\
 # volumes).
 #
 # You can reproduce what winter does by hand:
-#   source <(winter env workspace)
+#   source <(winter env workspace --resolve)
 #   docker compose -p myapp-workspace \\
 #       -f workspace-compose.yaml \\
 #       up -d

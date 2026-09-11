@@ -13,15 +13,16 @@ scope with no declared services is a clean exit-0 no-op rather than an error.
 Each file is independently runnable by hand. Winter-cli core injects `WINTER_PORT_BASE` and the scope's env-var band
 entries into the provider subprocess environment before `up`, `down`, and `status` invocations — see
 `winter-service-docker:/context/provider-contract.md#environment-variable-injection` for the full contract. To reproduce
-manually, source `winter env <scope>` first:
+manually, source `winter env <scope> --resolve` first — `--resolve` is what makes a command-valued band entry run,
+matching what core injects on `up`:
 
 ```bash
 # Feature env (e.g. alpha):
-source <(winter env alpha)
+source <(winter env alpha --resolve)
 docker compose -p myapp-alpha -f environment-compose.yaml up -d
 
 # Workspace singletons:
-source <(winter env workspace)
+source <(winter env workspace --resolve)
 docker compose -p myapp-workspace -f workspace-compose.yaml up -d
 ```
 
