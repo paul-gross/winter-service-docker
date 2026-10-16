@@ -49,8 +49,8 @@ stack side-by-side on the same docker host without port or namespace conflicts.
 3. **Edit `environment-compose.yaml`** — per-env services; use `${WSD_PORT_<NAME>}` for published ports.
 
 4. **Edit `workspace-compose.yaml`** — workspace singleton services; use fixed ports or reference
-   `${WINTER_WORKSPACE_PORT_BASE}` (injected by winter-cli core; available via `source <(winter env workspace --resolve)` for
-   manual runs).
+   `${WINTER_WORKSPACE_PORT_BASE}` (injected by winter-cli core; available via
+   `source <(winter env workspace --resolve)` for manual runs).
 
 5. **Register the extension** in workspace `.winter/config.toml`:
 

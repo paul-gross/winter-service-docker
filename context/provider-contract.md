@@ -67,10 +67,10 @@ docker-specific behavior over that contract:
 
 - It reads the injected vars from the process environment via `os.environ` — it does not locate, open, parse, or
   shell-source any per-env file, and so never invokes `winter env` itself; a command-valued band entry reaches compose
-  already resolved on `up`, because core ran it before dispatching — and passes them through as the subprocess environment to `docker compose` alongside
-  the computed `COMPOSE_PROJECT_NAME` and `WSD_PORT_*` values. Arbitrary workspace variables referenced in the compose
-  file (e.g. `${DATABASE_URL}`, `${WTS_DB_PORT}`) interpolate the same way; declare them in the workspace
-  `config.toml`'s env var bands — see
+  already resolved on `up`, because core ran it before dispatching — and passes them through as the subprocess
+  environment to `docker compose` alongside the computed `COMPOSE_PROJECT_NAME` and `WSD_PORT_*` values. Arbitrary
+  workspace variables referenced in the compose file (e.g. `${DATABASE_URL}`, `${WTS_DB_PORT}`) interpolate the same
+  way; declare them in the workspace `config.toml`'s env var bands — see
   `workspace:/context/winter-cli/configuration/ports-and-environments.md#env-var-bands`.
 - Because `restart`/`logs` run without `WINTER_PORT_BASE`, `docker compose` may emit benign `"variable is not set"`
   warnings for `${WSD_PORT_*}`/`${WINTER_PORT_BASE}` references in the compose file; these are expected and safe to

@@ -14,10 +14,12 @@ jobs:
     name: Markdown
     runs-on: ubuntu-latest
     steps:
-      # Placeholder: `dprint check` and `rumdl check .` do not pass yet. Replace this step
-      # with them (see the winter-canon CI) once the markdown is clean.
-      - name: Markdown lint (placeholder)
-        run: "true"
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: dprint check
+        run: npx --yes dprint@0.55.2 check
+      - name: rumdl check
+        run: uvx rumdl@0.2.54 check .
 
   python:
     name: Python
