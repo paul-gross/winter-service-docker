@@ -12,7 +12,7 @@ winter --service-orchestrator=/path/to/gamma/winter-service-docker service statu
 this provider — core computes each scope's environment and injects it into the provider subprocess (see
 `winter-service-docker:/context/provider-contract.md#environment-variable-injection`). If you are verifying a change
 that touches the status path, also point at the feature core with `--winter` (see
-`workspace:/context/winter-cli/root-flags.md`):
+`workspace:/context/winter/cli/root-flags.md`):
 
 ```bash
 winter --winter=./alpha/winter --service-orchestrator=./alpha/winter-service-docker service status alpha
@@ -39,4 +39,4 @@ the published host port with `docker compose ... ps` or `docker ps`.
 ## Doctor probe
 
 `workflow/doctor.sh` runs as part of `winter doctor`, checking that the docker daemon is reachable and compose v2 is
-installed. See `workspace:/context/winter-cli/configuration/doctor.md` for the doctor-probe contract.
+installed. See `workspace:/context/winter/cli/configuration/doctor.md` for the doctor-probe contract.

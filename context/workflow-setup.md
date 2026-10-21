@@ -15,14 +15,14 @@ silent skip.
 ## Caller contract
 
 This guide is invoked by the `ws-setup` service-orchestration sub-guide
-(`workspace:/context/setup-service-orchestration.md`, Step 4) after it has already discovered and assigned services. The
-caller provides:
+(`workspace:/context/winter/setup/service-orchestration.md`, Step 4) after it has already discovered and assigned
+services. The caller provides:
 
 - **The set of services assigned to docker**, each with a **scope**: `"project"` (per-env) or `"workspace"`.
 - **Whatever wiring facts were already discovered upstream** for each service, in the schema defined by
-  `workspace:/context/service-discovery.md` — its `container` field carries image/build reference, internal port,
-  environment variables, and volumes when the project already uses one (including the case where it found none at all).
-  Treat these as given; a field the caller didn't supply is the only kind you derive or ask about.
+  `workspace:/context/winter/setup/service-discovery.md` — its `container` field carries image/build reference, internal
+  port, environment variables, and volumes when the project already uses one (including the case where it found none at
+  all). Treat these as given; a field the caller didn't supply is the only kind you derive or ask about.
 
 This guide does not re-discover or re-assign services, and does not re-derive wiring facts the caller already supplied.
 It wires the assigned set — using supplied facts where given, resolving the rest — into docker's config and compose
@@ -128,14 +128,14 @@ found.
 
 **Start from what the caller supplied; only resolve what's missing — don't interrogate the user field by field.** For
 each remaining per-env service, use the caller-supplied image, internal port, and environment variables wherever given.
-For anything not supplied, infer it using the evidence sources `workspace:/context/service-discovery.md` defines for the
-`container` field (Dockerfile, docker-compose service block) plus `.env.example`, the README, and conventional defaults
-for the service's role. Resolve its **image** (and tag), the **internal port** the container listens on (Dockerfile
-`EXPOSE`, framework default, or compose file), and any **environment variables** the compose definition needs (e.g. a
-`DATABASE_URL` pointing at a workspace `db` service). If the caller's upstream research found no container for a service
-at all, that's your starting signal to design one from scratch using the same project evidence — default the internal
-port to the caller-supplied top-level `port` (the bare-process port the schema already discovered), when one was
-supplied, instead of re-deriving it.
+For anything not supplied, infer it using the evidence sources `workspace:/context/winter/setup/service-discovery.md`
+defines for the `container` field (Dockerfile, docker-compose service block) plus `.env.example`, the README, and
+conventional defaults for the service's role. Resolve its **image** (and tag), the **internal port** the container
+listens on (Dockerfile `EXPOSE`, framework default, or compose file), and any **environment variables** the compose
+definition needs (e.g. a `DATABASE_URL` pointing at a workspace `db` service). If the caller's upstream research found
+no container for a service at all, that's your starting signal to design one from scratch using the same project
+evidence — default the internal port to the caller-supplied top-level `port` (the bare-process port the schema already
+discovered), when one was supplied, instead of re-deriving it.
 
 Then **present the full proposed wiring** and ask **one** question:
 

@@ -1,13 +1,13 @@
 # Docker-specific provider contract for winter-service-docker
 
 This extension implements winter's **service orchestrator provider** contract. Read the canonical contract first —
-`workspace:/context/winter-cli/contracts/service-orchestrator.md` owns the generic wire contract; consult it whenever
+`workspace:/context/winter/cli/contracts/service-orchestrator.md` owns the generic wire contract; consult it whenever
 you need the action argv, exit codes, the `status`/`describe` JSON shapes, the `logs` NDJSON shape, or the `WINTER_*`
 dispatch-var rules. This doc is the docker-specific overlay on top of that contract — it covers only what is specific to
 the docker compose implementation.
 
 For the doctor-probe contract (NDJSON shape, `pass`/`warn`/`fail` semantics, exit-code rules), see
-`workspace:/context/winter-cli/configuration/doctor.md#probe-output-contract`.
+`workspace:/context/winter/cli/configuration/doctor.md#probe-output-contract`.
 
 ## Docker-state → winter-state/health mapping
 
@@ -59,7 +59,7 @@ is unique.
 ## Environment variable injection
 
 Which `WINTER_*` vars (and computed env-band entries) core injects on each action is owned by
-`workspace:/context/winter-cli/contracts/service-orchestrator.md#always-present-environment-variables` —
+`workspace:/context/winter/cli/contracts/service-orchestrator.md#always-present-environment-variables` —
 `WINTER_SERVICE_PREFIX` is one of the base extension vars, present on every action (`up`, `down`, `status`, `restart`,
 `logs`, `describe`, `catalog`); the scope vars (`WINTER_ENV`, `WINTER_ENV_INDEX`, `WINTER_PORT_BASE`,
 `WINTER_WORKSPACE_PORT_BASE`, plus the band entries) additionally land on `up`/`down`/`status` only. This provider's
@@ -71,7 +71,7 @@ docker-specific behavior over that contract:
   environment to `docker compose` alongside the computed `COMPOSE_PROJECT_NAME` and `WSD_PORT_*` values. Arbitrary
   workspace variables referenced in the compose file (e.g. `${DATABASE_URL}`, `${WTS_DB_PORT}`) interpolate the same
   way; declare them in the workspace `config.toml`'s env var bands — see
-  `workspace:/context/winter-cli/configuration/ports-and-environments.md#env-var-bands`.
+  `workspace:/context/winter/cli/configuration/ports-and-environments.md#env-var-bands`.
 - Because `restart`/`logs` run without `WINTER_PORT_BASE`, `docker compose` may emit benign `"variable is not set"`
   warnings for `${WSD_PORT_*}`/`${WINTER_PORT_BASE}` references in the compose file; these are expected and safe to
   ignore — `restart`/`logs` act on already-created containers and do not re-publish ports.
