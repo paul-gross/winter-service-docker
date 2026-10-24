@@ -2,6 +2,8 @@
 name = "docker-orchestrator"
 version = "0.1.0"
 description = "Winter service-orchestrator provider that maps winter service verbs onto docker compose."
+license = "FSL-1.1-ALv2"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
 dependencies = []
 
