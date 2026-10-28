@@ -27,12 +27,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
-        with:
-          python-version: "3.12"
       - name: Install
         run: uv sync
       - name: Ruff
         run: uv run ruff check .
+      - name: Ruff format
+        run: uv run ruff format --check .
       - name: Pyright
         run: uv run pyright
       - name: Pytest
