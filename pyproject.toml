@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Winter service-orchestrator provider that maps winter service verbs onto docker compose."
 license = "FSL-1.1-ALv2"
 license-files = ["LICENSE"]
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 dependencies = []
 
 [build-system]
@@ -39,3 +39,6 @@ select = ["E", "F", "I", "UP", "B", "C4", "SIM", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["E501", "B008"]
+
+[tool.uv]
+required-version = ">=0.13,<0.14"

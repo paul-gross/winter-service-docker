@@ -32,21 +32,14 @@ configs is what opts this repo into it.
 
 Bash scripts: `bash -n <file>` catches syntax errors; `winter doctor` exercises the probe. No automated pre-commit hook.
 
-Python (`src/docker_orchestrator/`, `tests/`): run these before pushing any Python changes. Requires Python 3.11+
-(`tomllib` is stdlib from 3.11; the current dev env uses 3.12).
+Python (`src/docker_orchestrator/`, `tests/`): run these before pushing any Python changes. The runtime floor is Python
+3.11+ (`tomllib` is stdlib from 3.11; providers run under the host's bare `python3`); the dev venv uses Python 3.14 via
+uv 0.13, and lint and typecheck stay pinned to 3.11.
 
 ```bash
 uv run pytest          # must be green
 uv run ruff check .    # lint
 uv run pyright         # typecheck
-```
-
-Or via mise tasks if configured:
-
-```bash
-mise run test
-mise run lint
-mise run typecheck
 ```
 
 The `docker_orchestrator` runtime has no third-party dependencies (stdlib-only). The dev tooling (pytest, ruff, pyright)
